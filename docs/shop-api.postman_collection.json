@@ -1,0 +1,1090 @@
+{
+  "info": {
+    "name": "Shop API (Go + Echo + PostgreSQL + OTP + Payments)",
+    "description": "Run folders in order: 1 -> 2 -> 3 -> 4 -> 5. For every OTP step, read the 6-digit code from the terminal running `go run ./cmd/api` (it is printed there, simulating an SMS) and paste it into the matching collection variable before running \"Verify OTP\".",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "user_phone",
+      "value": ""
+    },
+    {
+      "key": "otp_code",
+      "value": "",
+      "description": "Paste the code you see in the server terminal after Request OTP (new user)."
+    },
+    {
+      "key": "admin_phone",
+      "value": "09120000000",
+      "description": "Must match ADMIN_PHONE in your .env"
+    },
+    {
+      "key": "admin_otp_code",
+      "value": "",
+      "description": "Paste the code you see in the server terminal after Request OTP (admin)."
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "address_id",
+      "value": ""
+    },
+    {
+      "key": "product_id",
+      "value": "1"
+    },
+    {
+      "key": "new_product_id",
+      "value": ""
+    },
+    {
+      "key": "order_id",
+      "value": ""
+    },
+    {
+      "key": "authority",
+      "value": ""
+    },
+    {
+      "key": "new_phone",
+      "value": ""
+    },
+    {
+      "key": "new_phone_otp_code",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health",
+        "auth": {
+          "type": "noauth"
+        }
+      }
+    },
+    {
+      "name": "1. Auth (OTP)",
+      "item": [
+        {
+          "name": "Request OTP (new user)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"user_phone\", \"0912\" + Math.floor(1000000 + Math.random()*8999999));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/request",
+            "description": "After running this, check the TERMINAL where `go run ./cmd/api` is running — the 6-digit code is printed there (simulated SMS). Copy it into the `otp_code` collection variable, then run the next request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{user_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "-> Verify OTP (register new user)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set(\"token\", pm.response.json().access_token);",
+                  "pm.collectionVariables.set(\"user_id\", pm.response.json().user.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/verify",
+            "description": "Set `otp_code` to the code you copied from the server terminal before running this.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{user_phone}}\",\n  \"code\": \"{{otp_code}}\",\n  \"first_name\": \"Ali\",\n  \"last_name\": \"Rezaei\",\n  \"email\": \"ali@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Request OTP (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/request",
+            "description": "ADMIN_PHONE from your .env (the admin user is created on server start). Again, read the code from the server terminal.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{admin_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "-> Verify OTP (admin login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set(\"admin_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/verify",
+            "description": "Set `admin_otp_code` to the code shown in the server terminal for the admin phone.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{admin_phone}}\",\n  \"code\": \"{{admin_otp_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Me (current user)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Addresses",
+      "item": [
+        {
+          "name": "Create address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"address_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/addresses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_name\": \"Ali Rezaei\",\n  \"receiver_phone\": \"09121234567\",\n  \"province\": \"Tehran\",\n  \"city\": \"Tehran\",\n  \"address_line\": \"Azadi St, No. 1, Unit 2\",\n  \"postal_code\": \"1234567890\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List my addresses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/addresses"
+          }
+        },
+        {
+          "name": "Set address as default",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{base_url}}/api/v1/addresses/{{address_id}}/default"
+          }
+        },
+        {
+          "name": "Update address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/addresses/{{address_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_name\": \"Ali Rezaei\",\n  \"receiver_phone\": \"09121234567\",\n  \"province\": \"Tehran\",\n  \"city\": \"Tehran\",\n  \"address_line\": \"Azadi St, No. 1, Unit 2 (updated)\",\n  \"postal_code\": \"1234567890\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Products",
+      "item": [
+        {
+          "name": "List products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/products?page=1&limit=10",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/products/{{product_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create product (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"new_product_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gaming Headset\",\n  \"description\": \"7.1 surround USB headset\",\n  \"price\": 1200000,\n  \"stock\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update product (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/products/{{new_product_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gaming Headset Pro\",\n  \"description\": \"7.1 surround USB headset, updated\",\n  \"price\": 1350000,\n  \"stock\": 15\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete product (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/v1/products/{{new_product_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Orders & Payment",
+      "item": [
+        {
+          "name": "Place order (needs address_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"order_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "description": "Order is created with status \"awaiting_payment\" and stock is reserved immediately.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": {{address_id}},\n  \"items\": [\n    { \"product_id\": {{product_id}}, \"quantity\": 2 },\n    { \"product_id\": 2, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Request payment (get gateway authority)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"authority\", pm.response.json().authority);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/pay"
+          }
+        },
+        {
+          "name": "View payment gateway page (public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/payments/{{authority}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Confirm payment: pay (public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/payments/{{authority}}/confirm",
+            "description": "Simulates the bank telling us the payment succeeded. The order becomes \"paid\" and gets a ref_id (tracking code).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"pay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "List my orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Get order by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Negative cases",
+      "item": [
+        {
+          "name": "Me without token -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/me",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verify OTP with wrong code -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/verify",
+            "description": "Only works if you have NOT already verified the real code for this phone yet.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{user_phone}}\",\n  \"code\": \"000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Request OTP (fresh phone, for the field-error demo below)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"new_phone\", \"0913\" + Math.floor(1000000 + Math.random()*8999999));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/request",
+            "description": "Check the server terminal for the code, then paste it into `new_phone_otp_code` before running the next request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{new_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verify OTP without first/last name -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/auth/otp/verify",
+            "description": "A brand-new phone number with no first_name/last_name returns 422 with field-level details. The code is NOT consumed, so you could retry with the names included.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{new_phone}}\",\n  \"code\": \"{{new_phone_otp_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create product as normal user -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hack\",\n  \"description\": \"\",\n  \"price\": 1,\n  \"stock\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Order without a valid address_id -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": 999999,\n  \"items\": [\n    {\n      \"product_id\": 1,\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Order with too much quantity -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"items\": [\n    {\n      \"product_id\": 3,\n      \"quantity\": 1000\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Order with empty items -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address_id\": \"{{address_id}}\",\n  \"items\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pay an already-paid order -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/pay",
+            "description": "Run after confirming payment above; the order is no longer awaiting_payment."
+          }
+        },
+        {
+          "name": "Confirm an already-processed payment -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/payments/{{authority}}/confirm",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"cancel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Address with invalid postal code -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/addresses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_name\": \"A\",\n  \"receiver_phone\": \"09121234567\",\n  \"province\": \"Tehran\",\n  \"city\": \"Tehran\",\n  \"address_line\": \"x\",\n  \"postal_code\": \"123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

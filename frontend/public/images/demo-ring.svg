@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 720" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="48" y1="20" x2="590" y2="700" gradientUnits="userSpaceOnUse"><stop stop-color="#FAF8F2"/><stop offset="1" stop-color="#EDE8DA"/></linearGradient>
+    <linearGradient id="gold" x1="180" y1="387" x2="465" y2="565" gradientUnits="userSpaceOnUse"><stop stop-color="#8C6428"/><stop offset=".2" stop-color="#E9CB7A"/><stop offset=".47" stop-color="#FFF0B5"/><stop offset=".68" stop-color="#C0923D"/><stop offset="1" stop-color="#7A5526"/></linearGradient>
+    <linearGradient id="stone" x1="283" y1="222" x2="366" y2="338" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFDF8"/><stop offset=".48" stop-color="#F0E4C7"/><stop offset="1" stop-color="#C7AE77"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="matrix(232 0 0 210 320 365)" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFDF7"/><stop offset="1" stop-color="#FFFDF7" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="106" y="270" width="430" height="343" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="13"/></filter>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h640v720H0z"/><path fill="url(#glow)" d="M0 0h640v720H0z"/>
+  <circle cx="320" cy="350" r="220" stroke="#D7CBAF" stroke-opacity=".42"/>
+  <ellipse cx="320" cy="522" fill="#78613A" fill-opacity=".2" filter="url(#shadow)" rx="163" ry="32"/>
+  <ellipse cx="320" cy="474" stroke="url(#gold)" stroke-width="42" rx="147" ry="76" transform="rotate(-10 320 474)"/>
+  <path d="M178 449c26-43 56-65 92-75M371 546c42-5 77-23 104-52" stroke="#FFF4CE" stroke-linecap="round" stroke-opacity=".9" stroke-width="7"/>
+  <path d="m274 332 46-116 46 116-46 43-46-43Z" fill="url(#stone)" stroke="#A9823D" stroke-width="5"/>
+  <path d="m274 332 46 43v-159l-46 116Z" fill="#E8DAB8" fill-opacity=".72"/>
+  <path d="m366 332-46 43v-159l46 116Z" fill="#C4A866" fill-opacity=".52"/>
+  <path d="M275 334h90M320 216v159" stroke="#A9823D" stroke-opacity=".55" stroke-width="3"/>
+  <path d="M243 343c18-11 39-16 62-15m31 0c23-1 44 4 62 15" stroke="url(#gold)" stroke-linecap="round" stroke-width="15"/>
+  <path d="m188 276 5 14 14 5-14 5-5 14-5-14-14-5 14-5 5-14Zm273 172 4 11 11 4-11 4-4 11-4-11-11-4 11-4 4-11Z" fill="#B18C4C" fill-opacity=".76"/>
+</svg>
