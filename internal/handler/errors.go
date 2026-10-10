@@ -73,6 +73,8 @@ func mapError(err error) (int, ErrorResponse) {
 	case errors.As(err, &cooldownErr):
 		secs := cooldownErr.RetryAfterSeconds
 		return http.StatusTooManyRequests, ErrorResponse{Error: err.Error(), RetryAfter: &secs}
+	case errors.Is(err, domain.ErrRateLimitExceeded):
+		return http.StatusTooManyRequests, ErrorResponse{Error: domain.ErrRateLimitExceeded.Error()}
 	case errors.Is(err, domain.ErrInvalidInput):
 		return http.StatusBadRequest, ErrorResponse{Error: err.Error()}
 	case errors.Is(err, domain.ErrUnauthorized):

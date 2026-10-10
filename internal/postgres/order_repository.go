@@ -18,11 +18,11 @@ func NewOrderRepository(db DBTX) *OrderRepository { return &OrderRepository{db: 
 
 func (r *OrderRepository) Create(ctx context.Context, o *domain.Order) error {
 	const insertOrder = `INSERT INTO orders (
-		user_id,status,total_amount,items_amount,discount_amount,shipping_cost,coupon_id,coupon_code,shipping_method_id,shipping_method_name,tracking_code,
+		user_id,status,total_amount,items_amount,discount_amount,shipping_cost,coupon_id,coupon_code,shipping_method_id,shipping_method_name,tracking_code,payment_expires_at,
 		shipping_receiver_name,shipping_receiver_phone,shipping_province,shipping_city,shipping_address_line,shipping_postal_code
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id,created_at,updated_at`
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id,created_at,updated_at`
 	err := r.db.QueryRow(ctx, insertOrder,
-		o.UserID, string(o.Status), o.TotalAmount, o.ItemsAmount, o.DiscountAmount, o.ShippingCost, o.CouponID, o.CouponCode, o.ShippingMethodID, o.ShippingMethodName, o.TrackingCode,
+		o.UserID, string(o.Status), o.TotalAmount, o.ItemsAmount, o.DiscountAmount, o.ShippingCost, o.CouponID, o.CouponCode, o.ShippingMethodID, o.ShippingMethodName, o.TrackingCode, o.PaymentExpiresAt,
 		o.ShippingReceiverName, o.ShippingReceiverPhone, o.ShippingProvince,
 		o.ShippingCity, o.ShippingAddressLine, o.ShippingPostalCode,
 	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
@@ -46,7 +46,7 @@ const orderColumns = `o.id, o.user_id, o.status, o.total_amount, o.items_amount,
 	o.shipping_receiver_name, o.shipping_receiver_phone, o.shipping_province,
 	o.shipping_city, o.shipping_address_line, o.shipping_postal_code,
 	concat(u.first_name, ' ', u.last_name), u.phone, o.created_at, o.updated_at,
-	p.authority, p.status, p.ref_id, p.paid_at`
+	p.authority, p.status, p.ref_id, p.paid_at, o.payment_expires_at`
 
 const orderFrom = ` FROM orders o JOIN users u ON u.id = o.user_id LEFT JOIN payments p ON p.order_id = o.id `
 
@@ -58,6 +58,7 @@ func scanOrderWithPayment(row pgx.Row) (*domain.Order, error) {
 		payStatus        *string
 		payRefID         *string
 		payPaidAt        *time.Time
+		paymentExpiresAt time.Time
 		shippingMethodID pgtype.Int8
 		couponID         pgtype.Int8
 	)
@@ -66,11 +67,12 @@ func scanOrderWithPayment(row pgx.Row) (*domain.Order, error) {
 		&o.ShippingReceiverName, &o.ShippingReceiverPhone, &o.ShippingProvince,
 		&o.ShippingCity, &o.ShippingAddressLine, &o.ShippingPostalCode,
 		&o.CustomerName, &o.CustomerPhone, &o.CreatedAt, &o.UpdatedAt,
-		&payAuthority, &payStatus, &payRefID, &payPaidAt,
+		&payAuthority, &payStatus, &payRefID, &payPaidAt, &paymentExpiresAt,
 	); err != nil {
 		return nil, err
 	}
 	o.Status = domain.OrderStatus(status)
+	o.PaymentExpiresAt = paymentExpiresAt
 	if shippingMethodID.Valid {
 		id := shippingMethodID.Int64
 		o.ShippingMethodID = &id
@@ -135,6 +137,28 @@ func (r *OrderRepository) ListByUserID(ctx context.Context, userID int64, limit,
 
 func (r *OrderRepository) ListAll(ctx context.Context, status domain.OrderStatus, limit, offset int) ([]domain.Order, int, error) {
 	return r.list(ctx, 0, string(status), limit, offset)
+}
+
+func (r *OrderRepository) ListAwaitingPaymentBefore(ctx context.Context, before time.Time, limit int) ([]int64, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM orders
+		WHERE status = $1 AND payment_expires_at <= $2
+		ORDER BY payment_expires_at, id LIMIT $3`, string(domain.OrderStatusAwaitingPayment), before, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list expired orders: %w", err)
+	}
+	defer rows.Close()
+	ids := make([]int64, 0, limit)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan expired order id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired orders: %w", err)
+	}
+	return ids, nil
 }
 
 func (r *OrderRepository) list(ctx context.Context, userID int64, status string, limit, offset int) ([]domain.Order, int, error) {

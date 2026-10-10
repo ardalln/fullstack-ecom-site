@@ -12,13 +12,14 @@ import (
 )
 
 type OrderService struct {
-	orders    domain.OrderRepository
-	addresses domain.AddressRepository
-	tx        domain.TxManager
+	orders     domain.OrderRepository
+	addresses  domain.AddressRepository
+	tx         domain.TxManager
+	paymentTTL time.Duration
 }
 
-func NewOrderService(orders domain.OrderRepository, addresses domain.AddressRepository, tx domain.TxManager) *OrderService {
-	return &OrderService{orders: orders, addresses: addresses, tx: tx}
+func NewOrderService(orders domain.OrderRepository, addresses domain.AddressRepository, tx domain.TxManager, paymentTTL time.Duration) *OrderService {
+	return &OrderService{orders: orders, addresses: addresses, tx: tx, paymentTTL: paymentTTL}
 }
 
 // PlaceOrder buys the given items for a user, shipping to one of their saved
@@ -61,9 +62,10 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, addressID, shippi
 		}
 
 		o := &domain.Order{
-			UserID: userID,
-			Status: domain.OrderStatusAwaitingPayment,
-			Items:  make([]domain.OrderItem, 0, len(productIDs)),
+			UserID:           userID,
+			Status:           domain.OrderStatusAwaitingPayment,
+			Items:            make([]domain.OrderItem, 0, len(productIDs)),
+			PaymentExpiresAt: time.Now().Add(s.paymentTTL),
 
 			ShippingReceiverName:  address.ReceiverName,
 			ShippingReceiverPhone: address.ReceiverPhone,
@@ -218,6 +220,68 @@ func (s *OrderService) PlaceOrder(ctx context.Context, userID, addressID, shippi
 		return nil, err
 	}
 	return order, nil
+}
+
+func (s *OrderService) ExpireAwaitingPayments(ctx context.Context, now time.Time, limit int) (int, error) {
+	ids, err := s.orders.ListAwaitingPaymentBefore(ctx, now, limit)
+	if err != nil {
+		return 0, err
+	}
+	expired := 0
+	var failures []error
+	for _, id := range ids {
+		didExpire := false
+		err := s.tx.WithinTx(ctx, func(repos domain.Repositories) error {
+			order, err := repos.Orders.GetByIDForUpdate(ctx, id)
+			if err != nil {
+				return err
+			}
+			if order.Status != domain.OrderStatusAwaitingPayment || order.PaymentExpiresAt.After(now) {
+				return nil
+			}
+
+			payment, err := repos.Payments.GetByOrderID(ctx, id)
+			if err == nil {
+				if payment.Status != domain.PaymentPending {
+					return domain.ErrPaymentAlreadyProcessed
+				}
+				if err := repos.Payments.MarkCancelled(ctx, payment.Authority); err != nil {
+					return err
+				}
+			} else if !errors.Is(err, domain.ErrNotFound) {
+				return err
+			}
+
+			if err := repos.Orders.TransitionStatus(ctx, id, domain.OrderStatusAwaitingPayment, domain.OrderStatusCancelled); err != nil {
+				return err
+			}
+			for _, item := range order.Items {
+				if item.VariantID != "" {
+					err = repos.Products.IncreaseVariantStock(ctx, item.ProductID, item.VariantID, item.Quantity)
+				} else {
+					err = repos.Products.IncreaseStock(ctx, item.ProductID, item.Quantity)
+				}
+				if err != nil {
+					return err
+				}
+			}
+			if order.CouponID != nil {
+				if err := repos.Coupons.ReleaseUse(ctx, *order.CouponID); err != nil {
+					return err
+				}
+			}
+			didExpire = true
+			return nil
+		})
+		if err != nil {
+			failures = append(failures, fmt.Errorf("expire order %d: %w", id, err))
+			continue
+		}
+		if didExpire {
+			expired++
+		}
+	}
+	return expired, errors.Join(failures...)
 }
 
 // Get returns an order only if it belongs to the given user. Other users'

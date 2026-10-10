@@ -171,6 +171,7 @@ type ProductRepository interface {
 	GetByID(ctx context.Context, id int64) (*Product, error)
 	GetBySlug(ctx context.Context, slug string) (*Product, error)
 	List(ctx context.Context, search string, categoryID, brandID *int64, limit, offset int) ([]Product, int, error)
+	ListPopular(ctx context.Context, limit, offset int) ([]Product, int, error)
 	ListAdmin(ctx context.Context, search string, categoryID, brandID *int64, limit, offset int) ([]Product, int, error)
 	Update(ctx context.Context, p *Product) error
 	SetActive(ctx context.Context, id int64, active bool) error
@@ -282,7 +283,13 @@ type OrderRepository interface {
 	GetByIDForUpdate(ctx context.Context, id int64) (*Order, error)
 	ListByUserID(ctx context.Context, userID int64, limit, offset int) ([]Order, int, error)
 	ListAll(ctx context.Context, status OrderStatus, limit, offset int) ([]Order, int, error)
+	ListAwaitingPaymentBefore(ctx context.Context, before time.Time, limit int) ([]int64, error)
 	TransitionStatus(ctx context.Context, id int64, from, to OrderStatus) error
+}
+
+type RateLimitRepository interface {
+	Allow(ctx context.Context, key string, capacity int, refillInterval time.Duration) (bool, error)
+	DeleteExpired(ctx context.Context, before time.Time, limit int) (int64, error)
 }
 
 type DashboardStats struct {

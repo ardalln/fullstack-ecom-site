@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpLeft, BadgePercent, Check, ChevronDown,
-  CircleHelp, Clock3, Gem, ImagePlus, LogOut, MapPin, Menu, Minus,
-  Package, Plus, Search, Send, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles,
+  CircleHelp, Clock3, FileText, Gem, ImagePlus, LogOut, MapPin, Menu, Minus,
+  Package, Plus, Printer, Search, Send, ShieldCheck, ShoppingBag, SlidersHorizontal, Sparkles,
   Trash2, Truck, UserRound, X,
 } from 'lucide-react';
 import {
@@ -48,7 +48,7 @@ const DEMO_PRODUCTS = [
       { id: 'demo-ring-56', name: '۵۶', price: 31200000, discount_price: 27900000, stock: 3, image_url: '/images/demo-ring-detail.svg' },
     ],
     attributes: { عیار: '۱۸ عیار', 'وزن تقریبی': '۲٫۳ گرم', 'مناسب برای': 'استفادهٔ روزمره و هدیه' },
-    demo_only: true,
+    demo_only: true, is_popular: true,
   },
   {
     id: 'demo-necklace', name: 'گردنبند طلای ماه‌تاب', slug: 'demo-moonlight-necklace',
@@ -63,7 +63,7 @@ const DEMO_PRODUCTS = [
       { id: 'demo-necklace-45', name: '۴۵ سانتی‌متر', price: 38200000, discount_price: 34700000, stock: 2, image_url: '/images/demo-necklace-detail.svg' },
     ],
     attributes: { عیار: '۱۸ عیار', 'طول زنجیر': '۴۰ سانتی‌متر', 'نوع آویز': 'سنگی' },
-    demo_only: true,
+    demo_only: true, is_popular: true,
   },
 ];
 
@@ -234,13 +234,15 @@ export default function App() {
     return <NotFound onNavigate={navigate} />;
   };
 
-  return <div className="site-shell">
+  const showMobileQuickNav = !route.path.startsWith('/admin');
+  return <div className={`site-shell${showMobileQuickNav ? ' has-mobile-quick-nav' : ''}`}>
     <div className="announcement"><span>گالری طلا و زیورآلات ملکی</span><span className="announcement-side">زیبایی در جزئیات ماندگار است</span></div>
     <Header route={route} session={session} cartCount={count} categories={categories} brands={brands}
       searchValue={searchValue} setSearchValue={setSearchValue} onSearch={(q) => navigate(`/shop${q ? `?q=${encodeURIComponent(q)}` : ''}`)}
       onCart={() => navigate('/checkout')} onLogout={() => { updateSession(null); toast('از حساب خارج شدید.', 'info'); navigate('/'); }} />
     <main className="main-content" key={`${route.path}?${route.params.toString()}`}>{renderPage()}</main>
     <Footer onNavigate={navigate} />
+    {showMobileQuickNav && <MobileQuickNav route={route} session={session} categories={categories} brands={brands} />}
     <div className="toast-stack" aria-live="polite">{toasts.map((item) => <div key={item.id} className={`toast toast-${item.type}`}><Check size={17} />{item.message}</div>)}</div>
   </div>;
 }
@@ -263,7 +265,7 @@ function Header({ route, session, cartCount, categories, brands, searchValue, se
   return <header className="header-wrap">
     <div className="header-main page-width">
       <a className="brand-lockup maleki-lockup" href={routeHref('/')} aria-label="Maleki Jewelry Gallery، صفحهٔ اصلی">
-        <img className="maleki-logo" src="/images/maleki-header.png" alt="Maleki Jewelry Gallery" />
+        <img className="maleki-logo" src="/images/maleki-header-hd.png" alt="Maleki Jewelry Gallery" />
       </a>
       <nav className={`primary-nav ${menuOpen ? 'is-open' : ''}`} aria-label="منوی اصلی">
         <a className={route.path === '/' ? 'nav-active' : ''} href={routeHref('/')} onClick={closeMobileNavigation}>خانه</a>
@@ -287,7 +289,7 @@ function Header({ route, session, cartCount, categories, brands, searchValue, se
         <a href="/blog" onClick={closeMobileNavigation}>مجله</a>
       </nav>
       <div className="header-actions">
-        <button className="icon-button mobile-menu-button" type="button" aria-label={menuOpen ? 'بستن فهرست' : 'باز کردن فهرست'} aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setMobileSubmenu(''); }}>{menuOpen ? <X size={19} /> : <Menu size={20} />}<span>{menuOpen ? 'بستن' : 'دسته‌ها'}</span></button>
+        <button className="icon-button mobile-menu-button" type="button" aria-label={menuOpen ? 'بستن فهرست' : 'باز کردن فهرست'} aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setMobileSubmenu(''); }}>{menuOpen ? <X size={19} /> : <Menu size={20} />}<span>{menuOpen ? 'بستن' : 'منو'}</span></button>
         {session ? <><a className="account-link" href={routeHref('/account')}><UserRound size={18} /><span>{session.user?.first_name || 'حساب من'}</span></a><button className="icon-button logout-icon" onClick={onLogout} title="خروج" aria-label="خروج"><LogOut size={18} /></button></>
           : <a className="account-link" href={routeHref('/login')}><UserRound size={18} /><span>ورود</span></a>}
         <button className="header-cart" type="button" onClick={onCart} aria-label={`سبد خرید، ${cartCount} کالا`}><ShoppingBag size={19} /><span>سبد خرید</span><b>{fa(cartCount)}</b></button>
@@ -297,11 +299,95 @@ function Header({ route, session, cartCount, categories, brands, searchValue, se
   </header>;
 }
 
+function MobileQuickNav({ route, session, categories, brands }) {
+  const [selectedPanel, setSelectedPanel] = useState('categories');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const roots = categories.filter((item) => !item.parent_id);
+
+  useEffect(() => { setPanelOpen(false); }, [route.path]);
+  useEffect(() => {
+    if (!panelOpen) return undefined;
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setPanelOpen(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [panelOpen]);
+
+  const panelLabel = selectedPanel === 'categories' ? 'دسته‌بندی‌ها' : 'برندها';
+  const togglePanel = (panel) => {
+    if (panelOpen && selectedPanel === panel) setPanelOpen(false);
+    else { setSelectedPanel(panel); setPanelOpen(true); }
+  };
+  return <div className="mobile-quick-nav">
+    <section className={`mobile-quick-panel${panelOpen ? ' is-open' : ''}`} id="mobile-quick-panel" aria-label={panelLabel} aria-hidden={!panelOpen} inert={!panelOpen}>
+      <div className="mobile-quick-panel-heading"><strong>{panelLabel}</strong><button type="button" className="mobile-quick-close" onClick={() => setPanelOpen(false)} aria-label="بستن"><X size={18} /></button></div>
+      {selectedPanel === 'categories' ? <div className="mobile-quick-category-list">
+        <a className="mobile-quick-all" href={routeHref('/shop')}>مشاهدهٔ همهٔ محصولات <ArrowLeft size={15} /></a>
+        {roots.map((root) => {
+          const children = categories.filter((item) => String(item.parent_id) === String(root.id));
+          return <div className="mobile-quick-category-group" key={root.id}>
+            <a className="mobile-quick-category-root" href={routeHref(`/categories/${encodeURIComponent(root.slug)}`)}>{root.name}<ArrowLeft size={14} /></a>
+            {children.length > 0 && <div className="mobile-quick-category-children">{children.map((child) => <a key={child.id} href={routeHref(`/categories/${encodeURIComponent(child.slug)}`)}>{child.name}</a>)}</div>}
+          </div>;
+        })}
+        {!roots.length && <p className="muted">هنوز دسته‌بندی‌ای ثبت نشده است.</p>}
+      </div> : <div className="mobile-quick-brand-list">
+        {brands.map((brand) => <a key={brand.id} href={routeHref(`/brands/${encodeURIComponent(brand.slug)}`)}><Sparkles size={15} />{brand.name}</a>)}
+        {!brands.length && <p className="muted">هنوز برندی ثبت نشده است.</p>}
+      </div>}
+    </section>
+    <nav className="mobile-quick-bar" aria-label="دسترسی سریع">
+      <button type="button" className={panelOpen && selectedPanel === 'categories' ? 'mobile-quick-active' : ''} aria-expanded={panelOpen && selectedPanel === 'categories'} aria-controls="mobile-quick-panel" onClick={() => togglePanel('categories')}><Gem size={19} /><span>دسته‌ها</span></button>
+      <button type="button" className={panelOpen && selectedPanel === 'brands' ? 'mobile-quick-active' : ''} aria-expanded={panelOpen && selectedPanel === 'brands'} aria-controls="mobile-quick-panel" onClick={() => togglePanel('brands')}><Sparkles size={19} /><span>برندها</span></button>
+      <a className={route.path.startsWith('/account') || route.path === '/login' ? 'mobile-quick-active' : ''} href={routeHref(session ? '/account' : '/login')}><UserRound size={19} /><span>پروفایل</span></a>
+    </nav>
+  </div>;
+}
+
+function useHorizontalDrag() {
+  const drag = useRef(null);
+  const suppressClick = useRef(false);
+
+  const onPointerDown = (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    drag.current = { startX: event.clientX, startScrollLeft: event.currentTarget.scrollLeft, moved: false };
+  };
+  const onPointerMove = (event) => {
+    if (!drag.current) return;
+    const delta = event.clientX - drag.current.startX;
+    if (!drag.current.moved && Math.abs(delta) < 5) return;
+    if (!drag.current.moved) event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current.moved = true;
+    event.currentTarget.classList.add('is-dragging');
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    event.currentTarget.scrollLeft = drag.current.startScrollLeft + (rtl ? delta : -delta);
+    event.preventDefault();
+  };
+  const finishDrag = (event) => {
+    if (!drag.current) return;
+    if (drag.current.moved) {
+      suppressClick.current = true;
+      event.currentTarget.classList.remove('is-dragging');
+      window.setTimeout(() => { suppressClick.current = false; }, 0);
+    }
+    drag.current = null;
+  };
+  const onClickCapture = (event) => {
+    if (!suppressClick.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClick.current = false;
+  };
+  return {
+    onPointerDown, onPointerMove, onPointerUp: finishDrag,
+    onPointerCancel: finishDrag, onClickCapture,
+  };
+}
+
 function RotateCcwIcon() { return <ArrowDownLeft size={16} />; }
 
 function Footer({ onNavigate }) {
   return <footer className="site-footer"><div className="page-width footer-main">
-    <div className="footer-brand"><a className="brand-lockup maleki-lockup" href={routeHref('/')}><img className="maleki-logo" src="/images/maleki-header.png" alt="Maleki Jewelry Gallery" /></a><p>زیورآلاتی برای لحظه‌های ماندگار؛ انتخابی ظریف برای هر روز.</p></div>
+    <div className="footer-brand"><a className="brand-lockup maleki-lockup" href={routeHref('/')}><img className="maleki-logo" src="/images/maleki-header-hd.png" alt="Maleki Jewelry Gallery" /></a><p>زیورآلاتی برای لحظه‌های ماندگار؛ انتخابی ظریف برای هر روز.</p></div>
     <div><strong>راهنمای خرید</strong><a href={routeHref('/shop')}>همهٔ محصولات</a><a href={routeHref('/account/orders')}>پیگیری سفارش</a><a href={routeHref('/contact')}>تماس با ما و پشتیبانی</a></div>
     <div><strong>گالری ملکی</strong><a href="/blog">مجله و راهنما</a><a href={routeHref('/about')}>درباره ما</a><a href={routeHref('/terms')}>قوانین و مقررات</a><span className="muted">زیبایی در جزئیات است.</span></div>
     <div className="footer-newsletter"><strong>از ویترین تازه باخبر شو</strong><p>تازه‌های گالری و راهنمای انتخاب زیورآلات.</p><button className="text-link" onClick={() => onNavigate('/blog')}>رفتن به مجله <ArrowLeft size={15} /></button></div>
@@ -310,22 +396,47 @@ function Footer({ onNavigate }) {
 
 function HomePage({ categories, brands, onAdd }) {
   const [products, setProducts] = useState([]);
+  const [popularProducts, setPopularProducts] = useState([]);
+  const [catalogError, setCatalogError] = useState('');
+  const [popularError, setPopularError] = useState('');
   const [loading, setLoading] = useState(true);
+  const latestDrag = useHorizontalDrag();
+  const bestPriceDrag = useHorizontalDrag();
+  const categoryDrag = useHorizontalDrag();
   useEffect(() => {
     let active = true;
     if (DEMO_PREVIEW_MODE) {
       setProducts(DEMO_PRODUCTS);
+      setPopularProducts(DEMO_PRODUCTS);
+      setCatalogError('');
+      setPopularError('');
       setLoading(false);
       return () => { active = false; };
     }
-    api('/products?page=1&limit=12', { auth: false })
-      .then((result) => { if (active) setProducts(result.data || []); })
-      .catch(() => { if (active) setProducts([]); })
+    Promise.allSettled([
+      api('/products?page=1&limit=12', { auth: false }),
+      api('/products?popular=true&page=1&limit=12', { auth: false }),
+    ])
+      .then(([catalog, popular]) => {
+        if (!active) return;
+        if (catalog.status === 'fulfilled') {
+          setProducts(catalog.value.data || []);
+          setCatalogError('');
+        } else {
+          setCatalogError(catalog.reason?.message || 'دریافت فهرست محصولات ممکن نشد.');
+        }
+        if (popular.status === 'fulfilled') {
+          setPopularProducts(popular.value.data || []);
+          setPopularError('');
+        } else {
+          setPopularError(popular.reason?.message || 'دریافت محصولات محبوب ممکن نشد.');
+        }
+      })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
   const available = products.filter((product) => product.stock > 0);
-  const latest = available.slice(0, 4);
+  const latest = popularProducts.filter((product) => product.stock > 0).slice(0, 12);
   const bestPrice = [...available].sort((a, b) => lowestPriceForSort(a) - lowestPriceForSort(b)).slice(0, 5);
   const homeCategories = categories.filter((item) => !item.parent_id && item.show_on_home).slice(0, 6);
   const defaultCategories = [
@@ -338,14 +449,14 @@ function HomePage({ categories, brands, onAdd }) {
     <section className="page-width jewelry-category-section">
       <div className="home-section-head"><div><span className="eyebrow">گالری ملکی</span><h2>دسته‌بندی‌های اصلی</h2></div><a className="text-link" href={routeHref('/shop')}>مشاهده همه <ArrowLeft size={15} /></a></div>
       <DemoPreviewNotice />
-      <div className="jewelry-category-rail">{categoryItems.map((item, index) => <a className="jewelry-category-tile" href={item.slug ? routeHref(`/categories/${encodeURIComponent(item.slug)}`) : routeHref('/shop')} key={item.id}>
+      <div className="jewelry-category-rail drag-scroll" aria-label="دسته‌بندی‌های منتخب" {...categoryDrag}>{categoryItems.map((item, index) => <a className="jewelry-category-tile" href={item.slug ? routeHref(`/categories/${encodeURIComponent(item.slug)}`) : routeHref('/shop')} key={item.id}>
         <span className="jewelry-category-visual">{item.home_image_url ? <img src={item.home_image_url} alt="" loading="lazy" /> : <Gem size={index % 2 ? 30 : 34} strokeWidth={1.2} />}</span>
         <b>{item.home_title || item.name}</b>
       </a>)}</div>
     </section>
     <section id="catalog" className="page-width home-edit-picks jewelry-product-section">
       <div className="home-section-head"><div><span className="eyebrow">تازه‌های ویترین</span><h2>انتخابی برای هر روز</h2><p>زیورآلاتی که با سلیقهٔ تو کامل می‌شوند.</p></div><a className="text-link" href={routeHref('/shop')}>رفتن به فروشگاه <ArrowLeft size={15} /></a></div>
-      {loading ? <ProductSkeletons /> : latest.length ? <div className="product-grid">{latest.map((product, index) => <ProductCard key={product.id} product={product} index={index} onAdd={onAdd} />)}</div> : <EmptyState icon={Gem} title="به‌زودی درخشش تازه‌ای می‌رسد" body="محصولات گالری را برای نمایش در صفحهٔ اصلی به فروشگاه اضافه کن." action={<a className="button button-outline" href={routeHref('/shop')}>رفتن به فروشگاه</a>} />}
+      {loading ? <ProductSkeletons /> : popularError ? <ErrorPanel message={popularError} /> : latest.length ? <div className="home-product-rail drag-scroll" aria-label="محصولات محبوب ویترین" {...latestDrag}>{latest.map((product, index) => <ProductCard key={product.id} product={product} index={index} onAdd={onAdd} />)}</div> : <EmptyState icon={Gem} title="محصول محبوبی در ویترین نیست" body="برای نمایش در این بخش، گزینهٔ «محبوب» را در ویرایش محصول فعال کن." action={<a className="button button-outline" href={routeHref('/shop')}>رفتن به فروشگاه</a>} />}
     </section>
     <section className="page-width jewelry-secondary-banner">
       <div className="jewelry-secondary-copy"><span className="eyebrow">MALEKI · JEWELRY GALLERY</span><h2>زیبایی، در جزئیات ماندگار است.</h2><p>قطعه‌ای را انتخاب کن که روایتگر سلیقهٔ تو باشد.</p><a className="button button-green" href={routeHref('/shop')}>دیدن مجموعه <ArrowLeft size={16} /></a></div>
@@ -353,7 +464,7 @@ function HomePage({ categories, brands, onAdd }) {
     </section>
     <section className="page-width home-popular jewelry-best-price">
       <div className="home-section-head"><div><span className="eyebrow">انتخاب هوشمندانه</span><h2>با بهترین قیمت</h2><p>زیبایی دلنشین، با انتخابی متناسب با بودجه.</p></div><a className="text-link" href={routeHref('/shop')}>دیدن همه <ArrowLeft size={15} /></a></div>
-      {loading ? <ProductSkeletons /> : bestPrice.length ? <div className="best-price-rail">{bestPrice.map((product, index) => <ProductCard key={product.id} product={product} index={index} onAdd={onAdd} />)}</div> : <p className="muted">محصولی برای نمایش موجود نیست.</p>}
+      {loading ? <ProductSkeletons /> : catalogError ? <ErrorPanel message={catalogError} /> : bestPrice.length ? <div className="best-price-rail drag-scroll" aria-label="محصولات با بهترین قیمت" {...bestPriceDrag}>{bestPrice.map((product, index) => <ProductCard key={product.id} product={product} index={index} onAdd={onAdd} />)}</div> : <p className="muted">محصولی برای نمایش موجود نیست.</p>}
     </section>
     {brands.length > 0 && <section className="page-width home-brand-strip"><div><span className="eyebrow">نام‌های آشنا</span><h2>برندها و سازندگان</h2></div><div className="brand-links">{brands.slice(0, 8).map((brand) => <a key={brand.id} href={routeHref(`/brands/${encodeURIComponent(brand.slug)}`)}>{brand.name}<ArrowUpLeft size={14} /></a>)}</div></section>}
   </div>;
@@ -445,12 +556,29 @@ function StorePage({ route, categories, brands, onAdd }) {
   const title = categoryName || brandName || (query ? `نتایج جستجو برای «${query}»` : 'همهٔ زیورآلات');
   const hasFilters = Boolean(brandFilter || sizeFilter);
   const clearFilters = () => { setBrandFilter(''); setSizeFilter(''); };
+  const activeCategory = categories.find((item) => item.slug === categorySlug);
+  const activeRootCategory = activeCategory?.parent_id
+    ? categories.find((item) => String(item.id) === String(activeCategory.parent_id))
+    : activeCategory;
+  const rootCategories = categories.filter((item) => !item.parent_id);
+  const childCategories = activeRootCategory
+    ? categories.filter((item) => String(item.parent_id) === String(activeRootCategory.id))
+    : [];
   return <section id="catalog" className="page-width shop-section shop-page">
     <DemoPreviewNotice />
     <div className="catalog-heading"><div><span className="eyebrow"><Sparkles size={14} /> گالری طلا و زیورآلات</span><h1>{title}</h1><p>{query ? 'نتایج جست‌وجو را دقیق‌تر کن.' : 'از میان طلا و زیورآلات، انتخابت را پیدا کن.'}</p></div>
       <div className="catalog-heading-tools"><span className="catalog-result-count">{loading ? 'در حال دریافت محصولات…' : `${fa(sorted.length)} محصول`}</span><label className="sort-select"><SlidersHorizontal size={17} /><span>مرتب‌سازی</span><select aria-label="مرتب‌سازی محصولات" value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">جدیدترین</option><option value="price-low">ارزان‌ترین</option><option value="price-high">گران‌ترین</option></select></label></div>
     </div>
-    {categories.length > 0 && <div className="category-chips" aria-label="دسته‌بندی‌ها"><a className={!categorySlug ? 'chip chip-active' : 'chip'} href={routeHref('/shop')}>همهٔ مدل‌ها</a>{categories.map((item) => <a key={item.id} className={categorySlug === item.slug ? 'chip chip-active' : 'chip'} href={routeHref(`/categories/${encodeURIComponent(item.slug)}`)}>{item.parent_id ? <span>↳ </span> : null}{item.name}</a>)}</div>}
+    {categories.length > 0 && <div className="category-chips" aria-label="دسته‌بندی‌ها">
+      <div className="category-chips-desktop"><a className={!categorySlug ? 'chip chip-active' : 'chip'} href={routeHref('/shop')}>همهٔ مدل‌ها</a>{categories.map((item) => <a key={item.id} className={categorySlug === item.slug ? 'chip chip-active' : 'chip'} href={routeHref(`/categories/${encodeURIComponent(item.slug)}`)}>{item.name}</a>)}</div>
+      <div className="category-chips-mobile">
+        <div className="category-chip-parents"><a className={!categorySlug ? 'chip chip-active' : 'chip'} href={routeHref('/shop')}>همهٔ مدل‌ها</a>{rootCategories.map((item) => <a key={item.id} className={activeRootCategory?.id === item.id ? 'chip chip-active' : 'chip'} href={routeHref(`/categories/${encodeURIComponent(item.slug)}`)}>{item.name}</a>)}</div>
+        {childCategories.length > 0 && <div className="category-chip-children" aria-label={`زیر دسته‌های ${activeRootCategory.name}`}>
+          <a className={activeCategory?.id === activeRootCategory.id ? 'chip chip-active' : 'chip'} href={routeHref(`/categories/${encodeURIComponent(activeRootCategory.slug)}`)}>همهٔ {activeRootCategory.name}</a>
+          {childCategories.map((item) => <a key={item.id} className={categorySlug === item.slug ? 'chip chip-active' : 'chip'} href={routeHref(`/categories/${encodeURIComponent(item.slug)}`)}>{item.name}</a>)}
+        </div>}
+      </div>
+    </div>}
     <div className="catalog-layout">
       <aside className={`catalog-filters ${filtersOpen ? 'catalog-filters-open' : ''}`} aria-label="فیلتر محصولات">
         <div className="filter-panel-heading"><div><span className="eyebrow">جست‌وجوی دقیق</span><h2>فیلترها</h2></div><button type="button" aria-label="بستن فیلترها" className="icon-button filter-close" onClick={() => setFiltersOpen(false)}><X size={18} /></button></div>
@@ -588,6 +716,7 @@ function ProductPage({ slug, session, onAdd, toast, onNavigate }) {
   const source = selected || product;
   const price = activePrice(product, selected);
   const percent = discountPercent(source);
+  const quickAttributes = Object.entries(product.attributes || {}).filter(([, value]) => String(value || '').trim()).slice(0, 4);
   const chooseVariant = (variant) => { setSelected(variant); setActiveImage(variant.image_url || productImage(product)); };
   const submitComment = async (event) => {
     event.preventDefault();
@@ -603,11 +732,13 @@ function ProductPage({ slug, session, onAdd, toast, onNavigate }) {
     <section className="product-detail-grid">
       <div className="product-gallery"><div className="product-gallery-main">{activeImage ? <img className={product.demo_only ? 'demo-product-art' : ''} key={activeImage} src={activeImage} alt={product.name} onError={() => setActiveImage('')} /> : <ProductPlaceholder />}
         {percent > 0 && <span className="gallery-discount">{fa(percent)}٪ تخفیف</span>}</div>
+        {quickAttributes.length > 0 && <ul className="product-quick-specs product-quick-specs-mobile" aria-label="ویژگی‌های کوتاه محصول">{quickAttributes.map(([key, value]) => <li key={key}><b>{key}</b><span>{value}</span></li>)}</ul>}
         {images.length > 1 && <div className="product-thumbnails">{images.map((image, index) => <button key={image} className={activeImage === image ? 'thumbnail thumbnail-active' : 'thumbnail'} onClick={() => setActiveImage(image)} aria-label={`تصویر ${fa(index + 1)}`}><img src={image} alt="" loading="lazy" /></button>)}</div>}
         {product.description && <section className="product-description-under"><span className="eyebrow">جزئیات محصول</span><RichTextBlock value={product.description} /></section>}
       </div>
       <div className="product-info"><div className="product-brand-line"><span>{product.brand_name || 'برند منتخب'}</span><span className="rating">{fa(comments.length)} نظر ثبت‌شده</span></div>
         <h1>{product.name}</h1>
+        <ul className="product-quick-specs product-quick-specs-desktop" aria-label="ویژگی‌های کوتاه محصول">{quickAttributes.map(([key, value]) => <li key={key}><b>{key}</b><span>{value}</span></li>)}</ul>
         <div className="detail-price">{percent > 0 && <del>{money(source.price)}</del>}<strong>{money(price)}</strong>{percent > 0 && <span className="discount-badge">{fa(percent)}٪ تخفیف</span>}</div>
         {variants.length > 0 && <div className="size-picker"><div className="size-picker-heading"><strong>انتخاب {product.variant_label || 'گزینه'}</strong></div>
           <div className="size-grid">{variants.map((variant) => <button key={variant.id} type="button" className={`size-option ${selected?.id === variant.id ? 'size-selected' : ''}`} disabled={variant.stock <= 0} onClick={() => chooseVariant(variant)}>
@@ -616,7 +747,6 @@ function ProductPage({ slug, session, onAdd, toast, onNavigate }) {
         </div>}
         <div className="detail-actions">{product.demo_only ? <div className="demo-purchase-note">این محصول فقط برای بررسی ظاهر فروشگاه اضافه شده و قابل خرید نیست.</div> : <button className="button button-red button-wide" disabled={!product.stock || (variants.length > 0 && !selected) || (selected && selected.stock <= 0)} onClick={() => onAdd(product, selected)}><ShoppingBag size={18} />افزودن به سبد خرید</button>}</div>
         <div className="product-guarantees"><span><ShieldCheck size={17} /> مشخصات محصول</span><span><Truck size={17} /> روش‌های ارسال در پرداخت</span><span><CircleHelp size={17} /> پشتیبانی از حساب کاربری</span></div>
-        {product.attributes && Object.keys(product.attributes).length > 0 && <div className="spec-list"><h3>جزئیات محصول</h3>{Object.entries(product.attributes).map(([key, value]) => <div key={key}><span>{key}</span><b>{value}</b></div>)}</div>}
       </div>
     </section>
     <section className="detail-reviews"><div className="review-panel panel-light"><div className="review-heading"><div><span className="eyebrow">نظر خریداران</span><h2>تجربه‌ها</h2></div><span className="rating rating-large">{fa(comments.length)} نظر</span></div>
@@ -1054,12 +1184,23 @@ function MessageIcon() { return <Send size={15} />; }
 function BlogPage({ path, onNavigate }) {
   const slug = path.startsWith('/blog/') ? decodeURIComponent(path.slice('/blog/'.length)) : '';
   const [data, setData] = useState(null); const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [listLoading, setListLoading] = useState(false);
   useEffect(() => {
-    let active = true; setData(null); setError('');
-    api(slug ? `/blog/posts/${encodeURIComponent(slug)}` : '/blog/posts?page=1&limit=50', { auth: false }).then((value) => { if (active) setData(value); })
-      .catch((failure) => { if (active) setError(failure.message); });
-    return () => { active = false; };
-  }, [slug]);
+    let active = true;
+    if (slug) setData(null);
+    setError('');
+    if (!slug) setListLoading(true);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ page: '1', limit: '50' });
+      if (search.trim() && !slug) params.set('q', search.trim());
+      api(slug ? `/blog/posts/${encodeURIComponent(slug)}` : `/blog/posts?${params}`, { auth: false })
+        .then((value) => { if (active) setData(value); })
+        .catch((failure) => { if (active) setError(failure.message); })
+        .finally(() => { if (active) setListLoading(false); });
+    }, slug ? 0 : 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [slug, search]);
   useEffect(() => {
     if (!data) return;
     const post = slug ? data : null;
@@ -1073,12 +1214,41 @@ function BlogPage({ path, onNavigate }) {
   }, [data, slug]);
   if (error) return <div className="page-width section-space"><ErrorPanel message={error} /></div>;
   if (!data) return <div className="page-width loading-view"><span className="spinner" />در حال بارگذاری مجله…</div>;
-  if (slug) return <article className="page-width blog-article-page"><a className="back-link" href="/blog"><ArrowRight size={15} /> بازگشت به مجله</a>{data.cover_image_url && <img className="blog-cover" src={data.cover_image_url} alt={data.title} />}
-    <div className="blog-article-copy"><span className="eyebrow">مجله MALEKI · {shortDate(data.published_at)}</span><h1>{data.title}</h1>{data.summary && <p className="blog-summary">{data.summary}</p>}<div className="blog-content">{data.content}</div><div className="article-cta"><span>مدل مناسب خودت را پیدا کردی؟</span><button className="button button-red" onClick={() => onNavigate('/shop')}>رفتن به فروشگاه <ArrowLeft size={16} /></button></div></div></article>;
+  if (slug) {
+    const wordCount = richTextPlainText(data.content).split(/\s+/).filter(Boolean).length;
+    const readMinutes = Math.max(1, Math.ceil(wordCount / 180));
+    return <article className="page-width blog-article-page">
+      <a className="back-link" href="/blog"><ArrowRight size={15} /> بازگشت به مجله</a>
+      {data.cover_image_url && <img className="blog-cover" src={data.cover_image_url} alt={data.title} />}
+      <div className="blog-article-copy">
+        <span className="eyebrow">مجلهٔ ملکی · راهنمای زیورآلات</span><h1>{data.title}</h1>
+        <div className="blog-article-meta"><span>تیم تحریریهٔ ملکی</span><time>{shortDate(data.published_at)}</time><span><Clock3 size={14} /> {fa(readMinutes)} دقیقه مطالعه</span></div>
+        {data.summary && <p className="blog-summary">{data.summary}</p>}
+        <RichTextBlock value={data.content} className="blog-content" />
+        <div className="article-cta"><span>مدل مناسب خودت را پیدا کردی؟</span><button className="button button-red" onClick={() => onNavigate('/shop')}>رفتن به فروشگاه <ArrowLeft size={16} /></button></div>
+      </div>
+    </article>;
+  }
   const posts = data.data || [];
-  return <div className="page-width magazine-page"><section className="magazine-hero"><span className="eyebrow"><Sparkles size={14} /> مجله MALEKI</span><h1>زیورآلات خوب،<br /><em>شروع یک مسیر تازه.</em></h1><p>راهنمای انتخاب زیورآلات، مراقبت از زیورآلات و نگاه نزدیک به دنیای حرکت.</p><span className="magazine-mark">۰۱</span></section>
-    <SectionTitle eyebrow="دانستنی‌های گالری" title="تازه از مجله" />{posts.length ? <div className="blog-grid">{posts.map((post, index) => <article className={`blog-card ${index === 0 ? 'blog-card-featured' : ''}`} key={post.id}><a href={`/blog/${encodeURIComponent(post.slug)}`} className="blog-card-image">{post.cover_image_url ? <img src={post.cover_image_url} alt={post.title} loading="lazy" /> : <ProductPlaceholder />}<span className="blog-card-arrow"><ArrowUpLeft size={17} /></span></a><div className="blog-card-copy"><span className="eyebrow">راهنمای MALEKI · {shortDate(post.published_at)}</span><h2><a href={`/blog/${encodeURIComponent(post.slug)}`}>{post.title}</a></h2><p>{post.summary}</p><a className="text-link" href={`/blog/${encodeURIComponent(post.slug)}`}>ادامه مطلب <ArrowLeft size={14} /></a></div></article>)}</div>
-      : <EmptyState icon={Gem} title="مجله در راه است" body="به‌زودی راهنماهای انتخاب و نگهداری از زیورآلات اینجا منتشر می‌شوند." action={<button className="button button-outline" onClick={() => onNavigate('/')}>دیدن فروشگاه</button>} />}</div>;
+  return <div className="page-width magazine-page">
+    <section className="magazine-hero"><span className="eyebrow"><Sparkles size={14} /> مجلهٔ ملکی</span><h1>زیورآلات خوب،<br /><em>انتخابی ماندگار.</em></h1><p>راهنمای انتخاب، نگهداری و شناخت زیورآلات؛ نوشته‌هایی برای انتخاب آگاهانه‌تر.</p><span className="magazine-mark">مجله</span></section>
+    <div className="magazine-toolbar"><div><span className="eyebrow">دانستنی‌های گالری</span><h2>تازه از مجله</h2><p>{fa(data.total ?? posts.length)} نوشته برای الهام و راهنمایی</p></div>
+      <label className="magazine-search"><Search size={17} /><input type="search" aria-label="جست‌وجو در مجله" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="عنوان یا موضوع مطلب…" /></label>
+    </div>
+    {error ? <ErrorPanel message={error} /> : posts.length ? <div className="blog-grid">{posts.map((post, index) => {
+      const url = `/blog/${encodeURIComponent(post.slug)}`;
+      const words = richTextPlainText(post.content || post.summary).split(/\s+/).filter(Boolean).length;
+      const readMinutes = Math.max(1, Math.ceil(words / 180));
+      return <article className={`blog-card ${index === 0 && !search.trim() ? 'blog-card-featured' : ''}`} key={post.id}>
+        <a href={url} className="blog-card-image">{post.cover_image_url ? <img src={post.cover_image_url} alt={post.title} loading="lazy" /> : <ProductPlaceholder />}<span className="blog-card-arrow"><ArrowUpLeft size={17} /></span></a>
+        <div className="blog-card-copy"><span className="eyebrow">راهنمای ملکی</span><h2><a href={url}>{post.title}</a></h2><p>{post.summary}</p>
+          <div className="blog-card-meta"><time>{shortDate(post.published_at)}</time><span><Clock3 size={13} /> {fa(readMinutes)} دقیقه</span></div>
+          <a className="text-link" href={url}>ادامهٔ مطلب <ArrowLeft size={14} /></a>
+        </div>
+      </article>;
+    })}</div> : listLoading ? <div className="loading-view"><span className="spinner" />در حال جست‌وجو در مجله…</div>
+      : <EmptyState icon={Search} title={search.trim() ? 'مطلبی پیدا نشد' : 'مجله در راه است'} body={search.trim() ? 'عبارت جست‌وجو را کوتاه‌تر یا متفاوت وارد کن.' : 'به‌زودی راهنماهای انتخاب و نگهداری از زیورآلات اینجا منتشر می‌شوند.'} action={search.trim() ? <button className="button button-outline" onClick={() => setSearch('')}>پاک‌کردن جست‌وجو</button> : <button className="button button-outline" onClick={() => onNavigate('/')}>دیدن فروشگاه</button>} />}
+  </div>;
 }
 
 function PaymentPage({ authority, toast, onNavigate }) {
@@ -1186,17 +1356,54 @@ function LoadingState() { return <div className="panel-loading"><span className=
 
 function CampaignSlider() {
   const [slides, setSlides] = useState([]); const [active, setActive] = useState(0);
+  const bannerDrag = useRef(null);
+  const suppressBannerClick = useRef(false);
   useEffect(() => { api('/banners', { auth: false }).then(setSlides).catch(() => setSlides([])); }, []);
-  useEffect(() => { if (slides.length < 2) return undefined; const timer = window.setInterval(() => setActive((value) => (value + 1) % slides.length), 6500); return () => window.clearInterval(timer); }, [slides.length]);
+  useEffect(() => { if (slides.length < 2) return undefined; const timer = window.setInterval(() => setActive((value) => (value + 1) % slides.length), 6500); return () => window.clearInterval(timer); }, [slides.length, active]);
   if (!slides.length) return <section className="campaign-slider campaign-fallback page-width" aria-label="ویترین گالری ملکی">
     <div className="campaign-fallback-copy"><span className="eyebrow">MALEKI · JEWELRY GALLERY</span><h1>درخششِ<br /><em>ماندگار</em></h1><p>زیورآلاتی برای لحظه‌هایی که ارزش به‌یادماندن دارند.</p><a className="button button-green" href={routeHref('/shop')}>ورود به گالری <ArrowLeft size={16} /></a></div>
     <div className="campaign-fallback-art" aria-hidden="true"><span className="campaign-gold-orbit campaign-gold-orbit-one" /><span className="campaign-gold-orbit campaign-gold-orbit-two" /><span className="campaign-gold-spark campaign-gold-spark-one">✦</span><span className="campaign-gold-spark campaign-gold-spark-two">✧</span><Gem size={174} strokeWidth={.65} /><small>MALEKI · ۱۴۰۵</small></div>
   </section>;
-  const slide = slides[active % slides.length];
-  return <section className="campaign-slider page-width" aria-label="بنرهای فروشگاه"><a href={safeCampaignLink(slide.link_url)} className="campaign-slide" key={slide.id}>
-    <picture><source media="(max-width: 640px)" srcSet={slide.mobile_image_url} /><img src={slide.desktop_image_url} alt={slide.title || 'بنر فروشگاه MALEKI'} /></picture>
-    {(slide.title || slide.subtitle || slide.button_label) && <span className="campaign-copy"><b>{slide.title}</b>{slide.subtitle && <small>{slide.subtitle}</small>}{slide.button_label && <em>{slide.button_label}<ArrowLeft size={15} /></em>}</span>}
-  </a>{slides.length > 1 && <div className="campaign-dots">{slides.map((item, index) => <button type="button" aria-label={`بنر ${fa(index + 1)}`} className={index === active ? 'active' : ''} key={item.id} onClick={() => setActive(index)} />)}</div>}</section>;
+  const activeIndex = active % slides.length;
+  const onPointerDown = (event) => {
+    if (slides.length < 2 || event.target.closest('.campaign-dots') || event.button !== 0) return;
+    bannerDrag.current = { startX: event.clientX, deltaX: 0, moved: false };
+  };
+  const onPointerMove = (event) => {
+    if (!bannerDrag.current) return;
+    const delta = event.clientX - bannerDrag.current.startX;
+    bannerDrag.current.deltaX = delta;
+    if (!bannerDrag.current.moved && Math.abs(delta) < 8) return;
+    if (!bannerDrag.current.moved) event.currentTarget.setPointerCapture(event.pointerId);
+    bannerDrag.current.moved = true;
+    event.preventDefault();
+  };
+  const onPointerUp = () => {
+    if (!bannerDrag.current) return;
+    if (bannerDrag.current.moved) {
+      const direction = bannerDrag.current.deltaX < 0 ? 1 : -1;
+      setActive((index) => (index + direction + slides.length) % slides.length);
+      suppressBannerClick.current = true;
+      window.setTimeout(() => { suppressBannerClick.current = false; }, 0);
+    }
+    bannerDrag.current = null;
+  };
+  const onClickCapture = (event) => {
+    if (!suppressBannerClick.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressBannerClick.current = false;
+  };
+  return <section className="campaign-slider page-width" aria-label="بنرهای فروشگاه"
+    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+    onClickCapture={onClickCapture}>
+    {slides.map((slide, index) => <a href={safeCampaignLink(slide.link_url)} className={`campaign-slide${index === activeIndex ? ' campaign-slide-active' : ''}`}
+      key={slide.id} aria-hidden={index !== activeIndex} tabIndex={index === activeIndex ? 0 : -1} onDragStart={(event) => event.preventDefault()}>
+      <picture><source media="(max-width: 640px)" srcSet={slide.mobile_image_url} /><img src={slide.desktop_image_url} alt={slide.title || 'بنر فروشگاه MALEKI'} /></picture>
+      {(slide.title || slide.subtitle || slide.button_label) && <span className="campaign-copy"><b>{slide.title}</b>{slide.subtitle && <small>{slide.subtitle}</small>}{slide.button_label && <em>{slide.button_label}<ArrowLeft size={15} /></em>}</span>}
+    </a>)}
+    {slides.length > 1 && <div className="campaign-dots">{slides.map((item, index) => <button type="button" aria-label={`بنر ${fa(index + 1)}`} className={index === activeIndex ? 'active' : ''} key={item.id} onClick={() => setActive(index)} />)}</div>}
+  </section>;
 }
 
 function safeCampaignLink(raw) {
@@ -1271,13 +1478,24 @@ const ADMIN_TABS = [
 
 function AdminPage({ route, categories, brands, toast }) {
   const detailTicket = route.path.match(/^\/admin\/tickets\/(\d+)$/);
+  const detailOrder = route.path.match(/^\/admin\/orders\/(\d+)$/);
+  const productForm = route.path.match(/^\/admin\/products\/(new|edit\/(\d+))$/);
+  const brandForm = route.path.match(/^\/admin\/brands\/(new|edit\/(\d+))$/);
   const key = detailTicket ? 'tickets' : route.path.split('/')[2] || 'dashboard';
-  const title = ADMIN_TABS.find(([href]) => (href === '/admin' ? key === 'dashboard' : route.path.startsWith(href)))?.[1] || 'مدیریت';
+  const title = key === 'products' && productForm
+    ? productForm[2] ? 'ویرایش محصول' : 'افزودن محصول جدید'
+    : key === 'brands' && brandForm
+      ? brandForm[2] ? 'ویرایش برند' : 'افزودن برند جدید'
+      : ADMIN_TABS.find(([href]) => (href === '/admin' ? key === 'dashboard' : route.path.startsWith(href)))?.[1] || 'مدیریت';
+  const [productsMenuOpen, setProductsMenuOpen] = useState(route.path.startsWith('/admin/products'));
+  const [brandsMenuOpen, setBrandsMenuOpen] = useState(route.path.startsWith('/admin/brands'));
+  useEffect(() => { if (route.path.startsWith('/admin/products')) setProductsMenuOpen(true); }, [route.path]);
+  useEffect(() => { if (route.path.startsWith('/admin/brands')) setBrandsMenuOpen(true); }, [route.path]);
   let view;
-  if (key === 'products') view = <AdminProducts categories={categories} brands={brands} toast={toast} />;
+  if (key === 'products') view = <AdminProducts categories={categories} brands={brands} toast={toast} formPage={Boolean(productForm)} editID={productForm?.[2] || ''} />;
   else if (key === 'categories') view = <AdminCategories categories={categories} toast={toast} />;
-  else if (key === 'brands') view = <AdminBrands brands={brands} toast={toast} />;
-  else if (key === 'orders') view = <AdminOrders toast={toast} />;
+  else if (key === 'brands') view = <AdminBrands brands={brands} toast={toast} formPage={Boolean(brandForm)} editID={brandForm?.[2] || ''} />;
+  else if (key === 'orders') view = detailOrder ? <AdminOrderDetail id={detailOrder[1]} toast={toast} /> : <AdminOrders toast={toast} />;
   else if (key === 'users') view = <AdminUsers toast={toast} />;
   else if (key === 'comments') view = <AdminComments toast={toast} />;
   else if (key === 'blog') view = <AdminBlog toast={toast} />;
@@ -1288,7 +1506,23 @@ function AdminPage({ route, categories, brands, toast }) {
   else if (key === 'analytics') view = <AdminAnalytics toast={toast} />;
   else if (key === 'site-content') view = <AdminSiteContent toast={toast} />;
   else view = <AdminDashboard toast={toast} />;
-  return <div className="admin-page page-width"><aside className="admin-sidebar"><div className="admin-brand"><span className="brand-mark"><Gem size={19} /></span><span><b>MALEKI</b><small>میز مدیریت فروشگاه</small></span></div><nav>{ADMIN_TABS.map(([href, label, mark]) => <a className={(href === '/admin' ? key === 'dashboard' : route.path.startsWith(href)) ? 'active' : ''} href={routeHref(href)} key={href}><span className="admin-tab-mark">{mark}</span>{label}{key === 'tickets' && href === '/admin/tickets' ? <ArrowLeft size={14} /> : null}</a>)}</nav><a className="admin-store-link" href={routeHref('/')}>← بازگشت به فروشگاه</a></aside>
+  return <div className="admin-page page-width"><aside className="admin-sidebar"><div className="admin-brand"><span className="brand-mark"><Gem size={19} /></span><span><b>MALEKI</b><small>میز مدیریت فروشگاه</small></span></div><nav>{ADMIN_TABS.map(([href, label, mark]) => {
+    if (href === '/admin/products' || href === '/admin/brands') {
+      const productsGroup = href === '/admin/products';
+      const groupKey = productsGroup ? 'products' : 'brands';
+      const isForm = productsGroup ? productForm : brandForm;
+      const isOpen = productsGroup ? productsMenuOpen : brandsMenuOpen;
+      const setOpen = productsGroup ? setProductsMenuOpen : setBrandsMenuOpen;
+      const basePath = href;
+      const listLabel = productsGroup ? 'فهرست محصولات' : 'فهرست برندها';
+      const addLabel = productsGroup ? 'افزودن محصول جدید' : 'افزودن برند جدید';
+      return <div className={`admin-nav-group ${key === groupKey ? 'admin-nav-group-active' : ''}`} key={href}>
+        <div className="admin-nav-parent"><a className={key === groupKey && !isForm ? 'active' : ''} href={routeHref(basePath)}><span className="admin-tab-mark">{mark}</span>{label}</a><button type="button" aria-label={`نمایش زیرمنوی ${label}`} aria-expanded={isOpen} onClick={() => setOpen((open) => !open)}><ChevronDown size={15} /></button></div>
+        {isOpen && <div className="admin-nav-submenu"><a className={key === groupKey && !isForm ? 'active' : ''} href={routeHref(basePath)}>{listLabel}</a><a className={isForm && !isForm[2] ? 'active' : ''} href={routeHref(`${basePath}/new`)}>{addLabel}</a></div>}
+      </div>;
+    }
+    return <a className={(href === '/admin' ? key === 'dashboard' : route.path.startsWith(href)) ? 'active' : ''} href={routeHref(href)} key={href}><span className="admin-tab-mark">{mark}</span>{label}{key === 'tickets' && href === '/admin/tickets' ? <ArrowLeft size={14} /> : null}</a>;
+  })}</nav><a className="admin-store-link" href={routeHref('/')}>← بازگشت به فروشگاه</a></aside>
     <div className="admin-main"><header className="admin-heading"><div><span className="eyebrow">MALEKI · مدیریت</span><h1>{title}</h1><p>مدیریت فروشگاه، از یک نقطه.</p></div><a href={routeHref('/')} className="button button-outline button-small">مشاهده فروشگاه <ArrowUpLeft size={15} /></a></header>{view}</div></div>;
 }
 
@@ -1297,39 +1531,66 @@ function AdminDashboard({ toast }) {
   useEffect(() => { Promise.all([api('/admin/overview'), api('/admin/orders?page=1&limit=5')]).then(([summary, result]) => { setStats(summary); setOrders(result.data || []); }).catch((failure) => toast(failure.message, 'error')); }, []);
   if (!stats) return <LoadingState />;
   return <div className="admin-content"><div className="admin-welcome"><div><span className="eyebrow">خلاصه امروز</span><h2>سلام مدیر، آماده‌ی حرکتیم؟</h2><p>تصویر روشن فروشگاه و سفارش‌هایی که منتظر رسیدگی‌اند.</p></div><span className="admin-date">{shortDate(new Date().toISOString())}</span></div>
-    <div className="admin-stats">{[['فروش ثبت‌شده', money(stats.paid_revenue), 'مجموع سفارش‌های پرداخت‌شده', '↗'], ['سفارش‌ها', fa(stats.orders), `${fa(stats.pending_orders)} سفارش نیازمند اقدام`, '▣'], ['محصولات', fa(stats.products), 'محصولات فعال و غیرفعال', '▦'], ['کاربران', fa(stats.users), `${fa(stats.categories)} دسته‌بندی`, '♙']].map(([label, value, hint, icon]) => <article className="admin-stat-card" key={label}><span className="admin-stat-icon">{icon}</span><small>{label}</small><strong>{value}</strong><span>{hint}</span></article>)}</div>
+    <div className="admin-stats">{[['فروش ثبت‌شده', money(stats.paid_revenue), 'مجموع سفارش‌های پرداخت‌شده', '↗'], ['سفارش‌ها', fa(stats.orders), `${fa(stats.pending_orders)} سفارش نیازمند اقدام`, '▣'], ['محصولات', fa(stats.products), 'محصولات فعال و غیرفعال', '▦'], ['کاربران', fa(stats.users), `${fa(stats.categories)} دسته‌بندی`, '♙']].map(([label, value, hint, icon]) => <article className="admin-stat-card" key={label}><div className="admin-stat-heading"><small>{label}</small><span className="admin-stat-icon" aria-hidden="true">{icon}</span></div><strong>{value}</strong><span>{hint}</span></article>)}</div>
     <section className="admin-panel"><div className="admin-panel-heading"><div><span className="eyebrow">آخرین حرکت‌ها</span><h2>سفارش‌های تازه</h2></div><a className="text-link" href={routeHref('/admin/orders')}>همه سفارش‌ها <ArrowLeft size={15} /></a></div>{orders.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>سفارش</th><th>مشتری</th><th>وضعیت</th><th>مبلغ</th><th>تاریخ</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td>#{fa(order.id)}</td><td>{order.customer_name || order.customer_phone}</td><td><span className={`status-pill status-${order.status}`}>{ORDER_LABELS[order.status]}</span></td><td>{money(order.total_amount)}</td><td>{shortDate(order.created_at)}</td></tr>)}</tbody></table></div> : <p className="muted">هنوز سفارشی ثبت نشده است.</p>}</section>
     <div className="admin-quick-links">{ADMIN_TABS.slice(1, 5).map(([href, label]) => <a href={routeHref(href)} key={href}>{label}<ArrowUpLeft size={15} /></a>)}</div></div>;
 }
 
 const emptyProduct = { name: '', slug: '', description: '', image_urls: [], attributes: {}, variant_label: '', variants: [], category_id: '', brand_id: '', price: '', discount_price: '', stock: '', is_active: true, is_popular: false };
 
-function AdminProducts({ categories, brands, toast }) {
-  const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editing, setEditing] = useState(null); const [search, setSearch] = useState(''); const [busy, setBusy] = useState(false);
+function AdminProducts({ categories, brands, toast, formPage, editID }) {
+  const [products, setProducts] = useState([]); const [form, setForm] = useState(emptyProduct); const [editing, setEditing] = useState(null); const [search, setSearch] = useState(''); const [stockFilter, setStockFilter] = useState(''); const [busy, setBusy] = useState(false);
   const load = () => api(`/admin/products?page=1&limit=100${search ? `&q=${encodeURIComponent(search)}` : ''}`).then((result) => setProducts(result.data || [])).catch((failure) => toast(failure.message, 'error'));
   useEffect(() => { load(); }, [search]);
-  const editProduct = (product) => { setEditing(product.id); setForm({ ...emptyProduct, ...product, category_id: String(product.category_id || ''), brand_id: String(product.brand_id || ''), price: product.price, discount_price: product.discount_price || '', stock: product.stock, image_urls: product.image_urls?.length ? product.image_urls : product.image_url ? [product.image_url] : [], variants: product.variants || [] }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const editProduct = (product) => { setEditing(product.id); setForm({ ...emptyProduct, ...product, category_id: String(product.category_id || ''), brand_id: String(product.brand_id || ''), price: product.price, discount_price: product.discount_price || '', stock: product.stock, image_urls: product.image_urls?.length ? product.image_urls : product.image_url ? [product.image_url] : [], variants: product.variants || [] }); go(`/admin/products/edit/${product.id}`); };
+  useEffect(() => {
+    if (!formPage) { setEditing(null); setForm(emptyProduct); return; }
+    if (!editID) { setEditing(null); setForm(emptyProduct); return; }
+    const product = products.find((item) => String(item.id) === String(editID));
+    if (product) {
+      setEditing(product.id);
+      setForm({ ...emptyProduct, ...product, category_id: String(product.category_id || ''), brand_id: String(product.brand_id || ''), price: product.price, discount_price: product.discount_price || '', stock: product.stock, image_urls: product.image_urls?.length ? product.image_urls : product.image_url ? [product.image_url] : [], variants: product.variants || [] });
+    }
+  }, [formPage, editID, products]);
   const set = (key, value) => setForm((item) => ({ ...item, [key]: value }));
   const setVariant = (index, key, value) => setForm((item) => ({ ...item, variants: item.variants.map((variant, i) => i === index ? { ...variant, [key]: value } : variant) }));
+  const setAttribute = (index, field, value) => setForm((item) => {
+    const entries = Object.entries(item.attributes || {});
+    entries[index] = field === 'key' ? [value, entries[index][1]] : [entries[index][0], value];
+    return { ...item, attributes: Object.fromEntries(entries) };
+  });
+  const addAttribute = () => {
+    const attributes = form.attributes || {};
+    let index = 1;
+    while (Object.hasOwn(attributes, `ویژگی ${index}`)) index += 1;
+    set('attributes', { ...attributes, [`ویژگی ${index}`]: '' });
+  };
+  const removeAttribute = (index) => setForm((item) => ({ ...item, attributes: Object.fromEntries(Object.entries(item.attributes || {}).filter((_, entryIndex) => entryIndex !== index)) }));
+  const visibleProducts = products.filter((product) => !stockFilter || (stockFilter === 'available' ? product.stock > 0 : product.stock <= 0));
   const upload = async (files) => { for (const file of files) { const data = new FormData(); data.append('file', file); try { const result = await api('/admin/uploads', { method: 'POST', body: data }); setForm((item) => ({ ...item, image_urls: [...item.image_urls, result.url].slice(0, 8) })); } catch (failure) { toast(failure.message, 'error'); } } };
   const uploadVariantImage = async (index, file) => { if (!file) return; const data = new FormData(); data.append('file', file); try { const result = await api('/admin/uploads', { method: 'POST', body: data }); setVariant(index, 'image_url', result.url); toast('عکس این مقدار بارگذاری شد.'); } catch (failure) { toast(failure.message, 'error'); } };
   const submit = async (event) => {
     event.preventDefault(); setBusy(true);
     const variants = form.variants.map((item) => ({ ...item, price: Number(item.price), discount_price: Number(item.discount_price || 0), stock: Number(item.stock) }));
-    const body = { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), image_url: form.image_urls[0] || '', image_urls: form.image_urls, attributes: form.attributes || {}, variant_label: form.variant_label, variants, is_popular: Boolean(form.is_popular),
+    const attributes = Object.fromEntries(Object.entries(form.attributes || {}).map(([key, value]) => [key.trim(), String(value || '').trim()]).filter(([key, value]) => key && value));
+    const body = { name: form.name.trim(), slug: form.slug.trim(), description: form.description.trim(), image_url: form.image_urls[0] || '', image_urls: form.image_urls, attributes, variant_label: form.variant_label, variants, is_popular: Boolean(form.is_popular),
       category_id: Number(form.category_id), brand_id: Number(form.brand_id), price: variants.length ? 0 : Number(form.price), discount_price: variants.length ? 0 : Number(form.discount_price || 0), stock: variants.length ? 0 : Number(form.stock), is_active: Boolean(form.is_active) };
-    try { await api(editing ? `/products/${editing}` : '/products', { method: editing ? 'PUT' : 'POST', body }); setForm(emptyProduct); setEditing(null); await load(); toast(editing ? 'محصول ویرایش شد.' : 'محصول تازه ثبت شد.'); }
+    try { await api(editing ? `/products/${editing}` : '/products', { method: editing ? 'PUT' : 'POST', body }); setForm(emptyProduct); setEditing(null); await load(); toast(editing ? 'محصول ویرایش شد.' : 'محصول تازه ثبت شد.'); go('/admin/products'); }
     catch (failure) { toast(failure.message, 'error'); } finally { setBusy(false); }
   };
   const toggleActive = async (product) => { try { await api(`/admin/products/${product.id}/visibility`, { method: 'PATCH', body: { is_active: !product.is_active } }); await load(); toast(product.is_active ? 'محصول از فروشگاه پنهان شد.' : 'محصول در فروشگاه فعال شد.'); } catch (failure) { toast(failure.message, 'error'); } };
   const remove = async (product) => { if (!confirm(`محصول «${product.name}» حذف شود؟`)) return; try { await api(`/products/${product.id}`, { method: 'DELETE' }); await load(); toast('محصول حذف شد.'); } catch (failure) { toast(failure.message, 'error'); } };
-  return <div className="admin-content admin-products-page"><div className="admin-list-panel"><div className="admin-panel-heading"><div><span className="eyebrow">کاتالوگ فروشگاه</span><h2>محصولات <small>{fa(products.length)}</small></h2></div><label className="admin-search"><Search size={16} /><input placeholder="جستجوی محصول" value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
-    <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>محصول</th><th>دسته / برند</th><th>قیمت</th><th>موجودی</th><th>نمایش</th><th></th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td><div className="admin-product-cell">{product.image_url ? <img src={product.image_url} alt="" /> : <span><Gem size={18} /></span>}<div><b>{product.name}</b><small>{product.slug}</small></div></div></td><td>{product.category_name || '—'}<small>{product.brand_name}</small></td><td><PriceDisplay source={product} /></td><td>{fa(product.stock)}</td><td><button className={`visibility-switch ${product.is_active ? 'switch-on' : ''}`} onClick={() => toggleActive(product)}><span />{product.is_active ? 'فعال' : 'پنهان'}</button></td><td><div className="row-actions"><button onClick={() => editProduct(product)} aria-label="ویرایش"><PenIcon /></button><button onClick={() => remove(product)} aria-label="حذف"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table>{!products.length && <p className="muted table-empty">محصولی برای نمایش نیست.</p>}</div></div>
-    <form className="admin-form-panel" onSubmit={submit}><div className="admin-panel-heading"><div><span className="eyebrow">مدیریت کالا</span><h2>{editing ? 'ویرایش محصول' : 'محصول جدید'}</h2></div>{editing && <button className="icon-button" type="button" onClick={() => { setEditing(null); setForm(emptyProduct); }}><X size={18} /></button>}</div>
+  return <div className={`admin-content admin-products-page ${formPage ? 'admin-product-form-page' : ''}`}>{!formPage && <div className="admin-list-panel"><div className="admin-panel-heading"><div><span className="eyebrow">کاتالوگ فروشگاه</span><h2>محصولات <small>{fa(visibleProducts.length)}</small></h2></div><div className="admin-product-tools"><label className="admin-search"><Search size={16} /><input placeholder="جستجوی محصول" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="status-filter"><select aria-label="فیلتر موجودی محصولات" value={stockFilter} onChange={(event) => setStockFilter(event.target.value)}><option value="">همهٔ محصولات</option><option value="available">موجود</option><option value="unavailable">ناموجود</option></select></label><a className="button button-red button-small" href={routeHref('/admin/products/new')}><Plus size={14} /> محصول جدید</a></div></div>
+    <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>محصول</th><th>دسته / برند</th><th>قیمت</th><th>موجودی</th><th>نمایش</th><th></th></tr></thead><tbody>{visibleProducts.map((product) => <tr key={product.id}><td><div className="admin-product-cell">{product.image_url ? <img src={product.image_url} alt="" /> : <span><Gem size={18} /></span>}<div><b>{product.name}</b><small>{product.slug}</small></div></div></td><td>{product.category_name || '—'}<small>{product.brand_name}</small></td><td><PriceDisplay source={product} /></td><td>{fa(product.stock)}</td><td><button className={`visibility-switch ${product.is_active ? 'switch-on' : ''}`} onClick={() => toggleActive(product)}><span />{product.is_active ? 'فعال' : 'پنهان'}</button></td><td><div className="row-actions"><button onClick={() => editProduct(product)} aria-label="ویرایش"><PenIcon /></button><button onClick={() => remove(product)} aria-label="حذف"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table>{!visibleProducts.length && <p className="muted table-empty">محصولی برای این فیلتر موجود نیست.</p>}</div></div>}
+    {formPage && <form className="admin-form-panel" onSubmit={submit}><div className="admin-panel-heading"><div><span className="eyebrow">مدیریت کالا</span><h2>{editing ? 'ویرایش محصول' : 'محصول جدید'}</h2></div><div className="admin-form-heading-actions"><a className="text-link" href={routeHref('/admin/products')}>بازگشت به فهرست <ArrowRight size={14} /></a>{editing && <button className="icon-button" type="button" onClick={() => go('/admin/products')} aria-label="لغو ویرایش"><X size={18} /></button>}</div></div>
       <div className="form-stack"><div className="form-grid"><label className="field field-wide"><span>نام محصول</span><input value={form.name} onChange={(event) => { const name = event.target.value; setForm((item) => ({ ...item, name, slug: item.slug ? item.slug : createSlug(name) })); }} required /></label><label className="field"><span>اسلاگ</span><input dir="ltr" value={form.slug} onChange={(event) => set('slug', createSlug(event.target.value))} /></label>
         <label className="field"><span>دسته‌بندی</span><select value={form.category_id} onChange={(event) => set('category_id', event.target.value)} required><option value="">انتخاب دسته</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.parent_id ? `— ${item.name}` : item.name}</option>)}</select></label>
         <label className="field"><span>برند</span><select value={form.brand_id} onChange={(event) => set('brand_id', event.target.value)} required><option value="">انتخاب برند</option>{brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <div className="field field-wide"><RichTextEditor label="توضیحات محصول" value={form.description} onChange={(value) => set("description", value)} placeholder="معرفی، جنس، کاربرد و جزئیات محصول را بنویس…" minHeight={180} /></div></div>
+        <section className="admin-product-attributes"><div><h3>ویژگی‌های کوتاه محصول</h3><small>تا چهار ویژگی؛ مثل جنس، رنگ یا نوع نگین. در کنار عکس محصول نمایش داده می‌شوند.</small></div>
+          {Object.entries(form.attributes || {}).map(([key, value], index) => <div className="admin-product-attribute-row" key={index}><label className="field"><span>عنوان</span><input value={key} onChange={(event) => setAttribute(index, 'key', event.target.value)} placeholder="مثلاً جنس" /></label><label className="field"><span>توضیح کوتاه</span><input value={value} onChange={(event) => setAttribute(index, 'value', event.target.value)} placeholder="مثلاً نقرهٔ ۹۲۵" /></label><button type="button" className="remove-variant" aria-label={`حذف ویژگی ${key || index + 1}`} onClick={() => removeAttribute(index)}><Trash2 size={15} /></button></div>)}
+          {Object.keys(form.attributes || {}).length < 4 && <button type="button" className="button button-outline button-small" onClick={addAttribute}><Plus size={14} /> افزودن ویژگی</button>}
+        </section>
         <div className="field"><span className="field-label">تصاویر محصول</span><div className="admin-image-grid">{form.image_urls.map((url, index) => <div key={`${url}-${index}`}><img src={url} alt={`تصویر ${index + 1}`} /><button type="button" onClick={() => set('image_urls', form.image_urls.filter((_, i) => i !== index))}><X size={13} /></button>{index === 0 && <small>اصلی</small>}</div>)}<label className="upload-tile"><ImagePlus size={22} /><span>افزودن عکس</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { upload([...event.target.files]); event.target.value = ''; }} /></label></div></div>
         <label className="active-checkbox"><input type="checkbox" checked={Boolean(form.is_popular)} onChange={(event) => set('is_popular', event.target.checked)} /><span><b>نمایش در محبوب‌ترین‌ها</b><small>محصول فعال در اسلایدر صفحهٔ اصلی دیده می‌شود.</small></span></label>
         {!form.variants.length ? <div className="price-editor"><label className="field"><span>قیمت عادی <small>تومان</small></span><input type="number" min="1" value={form.price} onChange={(event) => set('price', event.target.value)} required /></label><label className="field"><span>قیمت تخفیفی <small>اختیاری</small></span><input type="number" min="0" value={form.discount_price} onChange={(event) => set('discount_price', event.target.value)} placeholder="بدون تخفیف" /></label><label className="field"><span>موجودی</span><input type="number" min="0" value={form.stock} onChange={(event) => set('stock', event.target.value)} required /></label>{Number(form.discount_price) > 0 && Number(form.discount_price) < Number(form.price) && <div className="discount-preview"><BadgePercent size={18} /><span>{fa(discountPercent({ price: form.price, discount_price: form.discount_price }))}٪ تخفیف</span><del>{money(form.price)}</del><b>{money(form.discount_price)}</b></div>}</div>
@@ -1344,7 +1605,7 @@ function AdminProducts({ categories, brands, toast }) {
           </div>)}<button className="button button-outline button-small" type="button" onClick={() => set('variants', [...form.variants, { id: '', name: '', price: '', discount_price: '', stock: 0, image_url: '' }])}><Plus size={15} />افزودن مقدار</button></div>}
         {!form.variants.length && <button className="text-link variant-add-link" type="button" onClick={() => { set('price', ''); set('stock', 0); set('discount_price', ''); set('variant_label', ''); set('variants', [{ id: '', name: '', price: '', discount_price: '', stock: 0, image_url: '' }]); }}>این محصول گزینه‌های متغیر دارد؟ <Plus size={14} /></button>}
         <label className="active-checkbox"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => set('is_active', event.target.checked)} /><span><b>نمایش محصول در فروشگاه</b><small>با خاموش‌کردن، محصول برای مشتری‌ها پنهان می‌شود.</small></span></label>
-        <button className="button button-red button-wide" disabled={busy}>{busy ? 'در حال ذخیره…' : editing ? 'ذخیره تغییرات' : 'ثبت محصول'} <ArrowLeft size={16} /></button></div></form></div>;
+        <button className="button button-red button-wide" disabled={busy}>{busy ? 'در حال ذخیره…' : editing ? 'ذخیره تغییرات' : 'ثبت محصول'} <ArrowLeft size={16} /></button></div></form>}</div>;
 }
 
 function PriceDisplay({ source }) {
@@ -1398,25 +1659,31 @@ function AdminCategories({ categories, toast }) {
   </div>;
 }
 
-function AdminBrands({ brands, toast }) {
+function AdminBrands({ brands, toast, formPage, editID }) {
   const blank = { name: "", slug: "", description: "", seo_title: "", seo_description: "" };
   const [form, setForm] = useState(blank); const [editing, setEditing] = useState(null);
+  useEffect(() => {
+    if (!formPage || !editID) { setEditing(null); setForm(blank); return; }
+    const brand = brands.find((item) => String(item.id) === String(editID));
+    if (brand) { setEditing(brand.id); setForm({ ...blank, ...brand }); }
+  }, [formPage, editID, brands]);
+  const editBrand = (brand) => { setEditing(brand.id); setForm({ ...blank, ...brand }); go(`/admin/brands/edit/${brand.id}`); };
   const submit = async (event) => {
     event.preventDefault();
-    try { await api(editing ? "/admin/brands/" + editing : "/admin/brands", { method: editing ? "PUT" : "POST", body: { ...form, slug: form.slug || createSlug(form.name) } }); setForm(blank); setEditing(null); window.dispatchEvent(new Event("catalog-refresh")); toast("برند ذخیره شد."); }
+    try { await api(editing ? "/admin/brands/" + editing : "/admin/brands", { method: editing ? "PUT" : "POST", body: { ...form, slug: form.slug || createSlug(form.name) } }); setForm(blank); setEditing(null); window.dispatchEvent(new Event("catalog-refresh")); toast("برند ذخیره شد."); go("/admin/brands"); }
     catch (failure) { toast(failure.message, "error"); }
   };
   const remove = async (brand) => { if (!confirm("برند «" + brand.name + "» حذف شود؟")) return; try { await api("/admin/brands/" + brand.id, { method: "DELETE" }); window.dispatchEvent(new Event("catalog-refresh")); toast("برند حذف شد."); } catch (failure) { toast(failure.message, "error"); } };
-  return <div className="admin-content admin-two-column">
-    <form className="admin-form-panel" onSubmit={submit}><span className="eyebrow">برندهای انتخاب‌شده</span><h2>{editing ? "ویرایش برند" : "افزودن برند"}</h2>
+  return <div className={`admin-content admin-two-column admin-brands-page ${formPage ? 'admin-brand-form-page' : ''}`}>
+    {!formPage && <div className="admin-list-panel"><div className="admin-panel-heading"><div><span className="eyebrow">ویترین برندها</span><h2>برندها <small>{fa(brands.length)}</small></h2></div><a className="button button-red button-small" href={routeHref('/admin/brands/new')}><Plus size={14} /> برند جدید</a></div><div className="brand-admin-grid">{brands.map((brand) => <article key={brand.id} className="brand-admin-card"><span className="brand-initial">{brand.name.slice(0, 1)}</span><b>{brand.name}</b><small>{brand.slug}</small><div className="row-actions"><button type="button" aria-label={`ویرایش ${brand.name}`} onClick={() => editBrand(brand)}><PenIcon /></button><button type="button" aria-label={`حذف ${brand.name}`} onClick={() => remove(brand)}><Trash2 size={15} /></button></div></article>)}</div>{!brands.length && <p className="muted">هنوز برندی ثبت نشده است.</p>}</div>}
+    {formPage && <form className="admin-form-panel" onSubmit={submit}><div className="admin-panel-heading"><div><span className="eyebrow">برندهای انتخاب‌شده</span><h2>{editing ? "ویرایش برند" : "افزودن برند"}</h2></div><div className="admin-form-heading-actions"><a className="text-link" href={routeHref('/admin/brands')}>بازگشت به فهرست <ArrowRight size={14} /></a>{editing && <button className="icon-button" type="button" onClick={() => go('/admin/brands')} aria-label="لغو ویرایش"><X size={18} /></button>}</div></div>
       <label className="field"><span>نام برند</span><input required value={form.name} onChange={(event) => setForm((item) => ({ ...item, name: event.target.value, slug: item.slug ? item.slug : createSlug(event.target.value) }))} /></label>
       <label className="field"><span>اسلاگ</span><input dir="ltr" value={form.slug} onChange={(event) => setForm((item) => ({ ...item, slug: createSlug(event.target.value) }))} /></label>
       <RichTextEditor label="معرفی مفصل برند" value={form.description || ""} onChange={(value) => setForm((item) => ({ ...item, description: value }))} placeholder="تاریخچه، سبک و راهنمای انتخاب محصولات این برند…" minHeight={220} />
       <label className="field"><span>عنوان سئو</span><input value={form.seo_title || ""} onChange={(event) => setForm((item) => ({ ...item, seo_title: event.target.value }))} /></label>
       <label className="field"><span>توضیحات متا برای گوگل</span><textarea rows={2} maxLength={320} value={form.seo_description || ""} onChange={(event) => setForm((item) => ({ ...item, seo_description: event.target.value }))} /></label>
-      <button className="button button-red">{editing ? "ذخیره تغییرات" : "افزودن برند"} <ArrowLeft size={15} /></button>{editing && <button type="button" className="text-link" onClick={() => { setEditing(null); setForm(blank); }}>انصراف از ویرایش</button>}
-    </form>
-    <div className="admin-list-panel"><span className="eyebrow">ویترین برندها</span><h2>برندها <small>{fa(brands.length)}</small></h2><div className="brand-admin-grid">{brands.map((brand) => <article key={brand.id} className="brand-admin-card"><span className="brand-initial">{brand.name.slice(0, 1)}</span><b>{brand.name}</b><small>{brand.slug}</small><div className="row-actions"><button onClick={() => { setEditing(brand.id); setForm({ ...blank, ...brand }); }}><PenIcon /></button><button onClick={() => remove(brand)}><Trash2 size={15} /></button></div></article>)}</div></div>
+      <button className="button button-red">{editing ? "ذخیره تغییرات" : "افزودن برند"} <ArrowLeft size={15} /></button>
+    </form>}
   </div>;
 }
 
@@ -1425,7 +1692,56 @@ function AdminOrders({ toast }) {
   const load = () => api(`/admin/orders?page=1&limit=100${status ? `&status=${status}` : ''}`).then((result) => setOrders(result.data || [])).catch((failure) => toast(failure.message, 'error'));
   useEffect(() => { load(); }, [status]);
   const changeStatus = async (order, next) => { try { await api(`/admin/orders/${order.id}/status`, { method: 'PATCH', body: { status: next } }); await load(); toast('وضعیت سفارش به‌روز شد.'); } catch (failure) { toast(failure.message, 'error'); } };
-  return <div className="admin-list-panel"><div className="admin-panel-heading"><div><span className="eyebrow">پردازش سفارش</span><h2>جریان سفارش‌ها</h2></div><select className="status-filter" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">همه وضعیت‌ها</option>{Object.entries(ORDER_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>شماره</th><th>مشتری</th><th>اقلام</th><th>مبلغ</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td>#{fa(order.id)}<small>{shortDate(order.created_at)}</small></td><td>{order.customer_name}<small>{order.customer_phone}</small></td><td>{fa(order.items?.length || 0)} قلم</td><td>{money(order.total_amount)}</td><td><span className={`status-pill status-${order.status}`}>{ORDER_LABELS[order.status]}</span></td><td>{order.status === 'paid' ? <button className="button button-small button-outline" onClick={() => changeStatus(order, 'processing')}>آماده‌سازی</button> : order.status === 'processing' ? <button className="button button-small button-red" onClick={() => changeStatus(order, 'shipped')}>ثبت ارسال</button> : order.status === 'awaiting_payment' ? <button className="text-link" onClick={() => changeStatus(order, 'cancelled')}>لغو سفارش</button> : '—'}</td></tr>)}</tbody></table></div>{!orders.length && <p className="muted table-empty">سفارشی برای این فیلتر ثبت نشده است.</p>}</div>;
+  return <div className="admin-list-panel"><div className="admin-panel-heading"><div><span className="eyebrow">پردازش سفارش</span><h2>جریان سفارش‌ها</h2></div><select className="status-filter" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">همه وضعیت‌ها</option>{Object.entries(ORDER_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>شماره</th><th>مشتری</th><th>اقلام</th><th>مبلغ</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td>#{fa(order.id)}<small>{shortDate(order.created_at)}</small></td><td>{order.customer_name}<small>{order.customer_phone}</small></td><td>{fa(order.items?.length || 0)} قلم</td><td>{money(order.total_amount)}</td><td><span className={`status-pill status-${order.status}`}>{ORDER_LABELS[order.status]}</span></td><td><div className="order-row-actions"><a className="button button-small button-outline" href={routeHref(`/admin/orders/${order.id}`)}><FileText size={14} />جزئیات</a>{order.status === 'paid' ? <button className="button button-small button-outline" onClick={() => changeStatus(order, 'processing')}>آماده‌سازی</button> : order.status === 'processing' ? <button className="button button-small button-red" onClick={() => changeStatus(order, 'shipped')}>ثبت ارسال</button> : order.status === 'awaiting_payment' ? <button className="text-link" onClick={() => changeStatus(order, 'cancelled')}>لغو سفارش</button> : null}</div></td></tr>)}</tbody></table></div>{!orders.length && <p className="muted table-empty">سفارشی برای این فیلتر ثبت نشده است.</p>}</div>;
+}
+
+function AdminOrderDetail({ id, toast }) {
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    api(`/admin/orders/${id}`)
+      .then((result) => { if (active) setOrder(result); })
+      .catch((failure) => {
+        if (!active) return;
+        setError(failure.message);
+        toast(failure.message, 'error');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [id, toast]);
+
+  if (loading) return <LoadingState />;
+  if (error || !order) return <div className="admin-order-detail"><a className="text-link" href={routeHref('/admin/orders')}><ArrowRight size={15} /> بازگشت به سفارش‌ها</a><ErrorPanel message={error || 'سفارش پیدا نشد.'} /></div>;
+
+  const address = order.shipping_address || {};
+  const receiverName = address.receiver_name || order.customer_name || '—';
+  const receiverPhone = address.receiver_phone || order.customer_phone || '—';
+  const addressParts = [address.province, address.city, address.address_line].filter(Boolean);
+
+  return <section className="admin-order-detail">
+    <div className="invoice-actions"><a className="button button-outline" href={routeHref('/admin/orders')}><ArrowRight size={16} /> بازگشت به سفارش‌ها</a><button className="button button-green" type="button" onClick={() => window.print()}><Printer size={16} /> چاپ فاکتور</button></div>
+    <article className="order-invoice invoice-page" dir="rtl">
+      <header className="invoice-header">
+        <div><span className="eyebrow">گالری طلا و زیورآلات ملکی</span><h2>فاکتور سفارش</h2><p>زیبایی در جزئیات ماندگار است.</p></div>
+        <div className="invoice-order-meta"><strong>شماره سفارش #{fa(order.id)}</strong><span>تاریخ ثبت: {dateTime(order.created_at)}</span><span className={`status-pill status-${order.status}`}>{ORDER_LABELS[order.status] || order.status}</span></div>
+      </header>
+      <div className="invoice-customer-grid">
+        <section className="invoice-info-card"><h3><UserRound size={16} /> گیرنده</h3><b>{receiverName}</b><span dir="ltr">{receiverPhone}</span></section>
+        <section className="invoice-info-card"><h3><MapPin size={16} /> نشانی ارسال</h3><p>{addressParts.length ? addressParts.join('، ') : 'نشانی برای این سفارش ثبت نشده است.'}</p>{address.postal_code && <span>کد پستی: <bdi dir="ltr">{address.postal_code}</bdi></span>}</section>
+        <section className="invoice-info-card"><h3><Truck size={16} /> روش ارسال</h3><b>{order.shipping_method_name || '—'}</b>{order.tracking_code && <span>کد رهگیری: <bdi dir="ltr">{order.tracking_code}</bdi></span>}</section>
+      </div>
+      <div className="invoice-items-wrap"><table className="invoice-items"><thead><tr><th>ردیف</th><th>شرح کالا</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr></thead>
+        <tbody>{(order.items || []).map((item, index) => <tr key={`${item.product_id}-${item.variant_id || index}`}><td>{fa(index + 1)}</td><td><b>{item.product_name}</b>{item.variant_name && <small>{item.variant_label ? `${item.variant_label}: ` : ''}{item.variant_name}</small>}</td><td>{fa(item.quantity)}</td><td>{money(item.unit_price)}</td><td>{money(item.subtotal)}</td></tr>)}</tbody>
+      </table></div>
+      <div className="invoice-summary"><div><span>جمع کالاها</span><b>{money(order.items_amount)}</b></div>{Number(order.discount_amount) > 0 && <div><span>تخفیف{order.coupon_code ? ` (${order.coupon_code})` : ''}</span><b>− {money(order.discount_amount)}</b></div>}<div><span>هزینهٔ ارسال</span><b>{Number(order.shipping_cost) ? money(order.shipping_cost) : 'رایگان'}</b></div><div className="invoice-total"><strong>مبلغ نهایی</strong><strong>{money(order.total_amount)}</strong></div></div>
+      <footer className="invoice-footer"><span>با سپاس از انتخاب شما</span><span>تاریخ چاپ: {dateTime(new Date().toISOString())}</span></footer>
+    </article>
+  </section>;
 }
 
 function AdminUsers({ toast }) {
@@ -1522,7 +1838,7 @@ function AdminAnalytics({ toast }) {
     ["بازدیدکنندهٔ کل", fa(data.unique_visitors), "شناسه‌های ناشناس در کل دوره", "♧"],
     ["بازدید صفحه امروز", fa(data.page_views_today), "نمایش‌های ثبت‌شده امروز", "▤"],
   ];
-  return <div className="admin-content admin-analytics"><div className="admin-stats">{metrics.map(([label, value, hint, icon]) => <article className="admin-stat-card" key={label}><span className="admin-stat-icon">{icon}</span><small>{label}</small><strong>{value}</strong><span>{hint}</span></article>)}</div>
+  return <div className="admin-content admin-analytics"><div className="admin-stats">{metrics.map(([label, value, hint, icon]) => <article className="admin-stat-card" key={label}><div className="admin-stat-heading"><small>{label}</small><span className="admin-stat-icon" aria-hidden="true">{icon}</span></div><strong>{value}</strong><span>{hint}</span></article>)}</div>
     {error && <ErrorPanel message={error} />}
     <section className="admin-panel"><div className="admin-panel-heading"><div><span className="eyebrow">تازه‌سازی خودکار هر ۱۰ ثانیه</span><h2>بازدیدکنندگان فعال و صفحهٔ جاری</h2></div><span className="status-pill status-paid">{fa(data.active_online)} آنلاین</span></div>
       {data.active_visitors?.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>شناسهٔ ناشناس</th><th>صفحه</th><th>مسیر</th><th>آخرین فعالیت</th></tr></thead><tbody>{data.active_visitors.map((visitor) => <tr key={visitor.visitor_id}><td dir="ltr">{visitor.visitor_id.slice(0, 8)}…</td><td>{analyticsPageName(visitor.path)}</td><td dir="ltr">{visitor.path}</td><td>{dateTime(visitor.last_seen)}</td></tr>)}</tbody></table></div> : <p className="muted">بازدیدکنندهٔ فعالی ثبت نشده؛ این صفحه با heartbeat مرورگرها به‌روز می‌شود.</p>}

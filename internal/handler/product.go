@@ -51,6 +51,13 @@ func (h *ProductHandler) ListAdmin(c echo.Context) error {
 
 func (h *ProductHandler) list(c echo.Context, admin bool) error {
 	page, limit := pagination(c)
+	if !admin && c.QueryParam("popular") == "true" {
+		products, total, err := h.svc.ListPopular(c.Request().Context(), page, limit)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, toProductPage(products, page, limit, total))
+	}
 	var categoryID, brandID *int64
 	search := strings.TrimSpace(c.QueryParam("q"))
 	if len(search) > 100 {

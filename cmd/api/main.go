@@ -89,7 +89,7 @@ func run(logger *slog.Logger) error {
 	categoryService := service.NewCategoryService(categoryRepo)
 	brandService := service.NewBrandService(brandRepo)
 	adminService := service.NewAdminService(userRepo, orderRepo, dashboardRepo, txManager)
-	orderService := service.NewOrderService(orderRepo, addressRepo, txManager)
+	orderService := service.NewOrderService(orderRepo, addressRepo, txManager, cfg.OrderPaymentTTL)
 	commerceService := service.NewCommerceService(bannerRepo, shippingRepo, couponRepo)
 	siteContentService := service.NewSiteContentService(siteContentRepo)
 	paymentService := service.NewPaymentService(orderRepo, paymentRepo, txManager)
@@ -105,31 +105,35 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("load frontend files: %w", err)
 	}
 
+	rateLimitRepo := postgres.NewRateLimitRepository(pool)
 	e := router.New(router.Deps{
-		Logger:      logger,
-		Tokens:      tokens,
-		Auth:        handler.NewAuthHandler(authService),
-		Products:    handler.NewProductHandler(productService),
-		Orders:      handler.NewOrderHandler(orderService),
-		Addresses:   handler.NewAddressHandler(addressService),
-		Payments:    handler.NewPaymentHandler(paymentService),
-		Categories:  handler.NewCategoryHandler(categoryService),
-		Brands:      handler.NewBrandHandler(brandService),
-		Uploads:     handler.NewUploadHandler("uploads"),
-		Comments:    handler.NewCommentHandler(commentService),
-		Blog:        handler.NewBlogHandler(blogService),
-		Tickets:     handler.NewTicketHandler(ticketService),
-		Commerce:    handler.NewCommerceHandler(commerceService, orderRepo),
-		SiteContent: handler.NewSiteContentHandler(siteContentService),
-		Analytics:   handler.NewAnalyticsHandler(analyticsRepo),
-		Admin:       handler.NewAdminHandler(adminService),
-		Users:       userRepo,
-		Static:      frontend,
+		Logger:         logger,
+		Tokens:         tokens,
+		Auth:           handler.NewAuthHandler(authService),
+		Products:       handler.NewProductHandler(productService),
+		Orders:         handler.NewOrderHandler(orderService),
+		Addresses:      handler.NewAddressHandler(addressService),
+		Payments:       handler.NewPaymentHandler(paymentService),
+		Categories:     handler.NewCategoryHandler(categoryService),
+		Brands:         handler.NewBrandHandler(brandService),
+		Uploads:        handler.NewUploadHandler("uploads"),
+		Comments:       handler.NewCommentHandler(commentService),
+		Blog:           handler.NewBlogHandler(blogService),
+		Tickets:        handler.NewTicketHandler(ticketService),
+		Commerce:       handler.NewCommerceHandler(commerceService, orderRepo),
+		SiteContent:    handler.NewSiteContentHandler(siteContentService),
+		Analytics:      handler.NewAnalyticsHandler(analyticsRepo),
+		Admin:          handler.NewAdminHandler(adminService),
+		Users:          userRepo,
+		RateLimits:     rateLimitRepo,
+		TrustedProxies: cfg.TrustedProxies,
+		Static:         frontend,
 	})
 	e.Server.ReadHeaderTimeout = 5 * time.Second
 	e.Server.ReadTimeout = 10 * time.Second
 	e.Server.WriteTimeout = 15 * time.Second
 	e.Server.IdleTimeout = 60 * time.Second
+	go runMaintenance(ctx, logger, orderService, rateLimitRepo)
 
 	// --- run + graceful shutdown ---
 	serverErr := make(chan error, 1)
@@ -154,4 +158,41 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
+}
+
+func runMaintenance(ctx context.Context, logger *slog.Logger, orders *service.OrderService, rateLimits *postgres.RateLimitRepository) {
+	orderTicker := time.NewTicker(time.Minute)
+	rateLimitTicker := time.NewTicker(time.Hour)
+	defer orderTicker.Stop()
+	defer rateLimitTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-orderTicker.C:
+			count, err := orders.ExpireAwaitingPayments(ctx, now, 100)
+			if err != nil {
+				logger.ErrorContext(ctx, "expire pending orders", slog.String("error", err.Error()))
+			} else if count > 0 {
+				logger.InfoContext(ctx, "expired pending orders", slog.Int("count", count))
+			}
+		case now := <-rateLimitTicker.C:
+			var total int64
+			for {
+				count, err := rateLimits.DeleteExpired(ctx, now.Add(-time.Hour), 1000)
+				if err != nil {
+					logger.ErrorContext(ctx, "clean up request rate limits", slog.String("error", err.Error()))
+					break
+				}
+				total += count
+				if count < 1000 {
+					break
+				}
+			}
+			if total > 0 {
+				logger.InfoContext(ctx, "cleaned up request rate limits", slog.Int64("count", total))
+			}
+		}
+	}
 }

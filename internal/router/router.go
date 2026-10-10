@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -19,24 +20,26 @@ import (
 
 // Deps are everything the router needs to wire up the routes.
 type Deps struct {
-	Logger      *slog.Logger
-	Tokens      *auth.TokenManager
-	Auth        *handler.AuthHandler
-	Products    *handler.ProductHandler
-	Orders      *handler.OrderHandler
-	Addresses   *handler.AddressHandler
-	Payments    *handler.PaymentHandler
-	Categories  *handler.CategoryHandler
-	Admin       *handler.AdminHandler
-	Brands      *handler.BrandHandler
-	Uploads     *handler.UploadHandler
-	Comments    *handler.CommentHandler
-	Blog        *handler.BlogHandler
-	Tickets     *handler.TicketHandler
-	Commerce    *handler.CommerceHandler
-	SiteContent *handler.SiteContentHandler
-	Analytics   *handler.AnalyticsHandler
-	Users       domain.UserRepository
+	Logger         *slog.Logger
+	Tokens         *auth.TokenManager
+	Auth           *handler.AuthHandler
+	Products       *handler.ProductHandler
+	Orders         *handler.OrderHandler
+	Addresses      *handler.AddressHandler
+	Payments       *handler.PaymentHandler
+	Categories     *handler.CategoryHandler
+	Admin          *handler.AdminHandler
+	Brands         *handler.BrandHandler
+	Uploads        *handler.UploadHandler
+	Comments       *handler.CommentHandler
+	Blog           *handler.BlogHandler
+	Tickets        *handler.TicketHandler
+	Commerce       *handler.CommerceHandler
+	SiteContent    *handler.SiteContentHandler
+	Analytics      *handler.AnalyticsHandler
+	Users          domain.UserRepository
+	RateLimits     domain.RateLimitRepository
+	TrustedProxies []net.IPNet
 
 	// Static holds the frontend files. When nil, only the API is served.
 	Static fs.FS
@@ -44,9 +47,16 @@ type Deps struct {
 
 func New(d Deps) *echo.Echo {
 	e := echo.New()
-	// Do not trust client-supplied X-Forwarded-For headers for rate limiting.
-	// Configure a trusted proxy extractor explicitly if this runs behind one.
-	e.IPExtractor = echo.ExtractIPDirect()
+	if len(d.TrustedProxies) > 0 {
+		trustOptions := make([]echo.TrustOption, 0, len(d.TrustedProxies))
+		for i := range d.TrustedProxies {
+			proxy := d.TrustedProxies[i]
+			trustOptions = append(trustOptions, echo.TrustIPRange(&proxy))
+		}
+		e.IPExtractor = echo.ExtractIPFromXFFHeader(trustOptions...)
+	} else {
+		e.IPExtractor = echo.ExtractIPDirect()
+	}
 	e.HideBanner = true
 	e.HidePort = true
 	e.Validator = handler.NewValidator()
@@ -68,10 +78,8 @@ func New(d Deps) *echo.Echo {
 	api := e.Group("/api/v1")
 
 	// Public
-	otpRequestLimiter := echomw.NewRateLimiterMemoryStoreWithConfig(echomw.RateLimiterMemoryStoreConfig{Rate: 1.0 / 30, Burst: 2, ExpiresIn: 10 * time.Minute})
-	otpVerifyLimiter := echomw.NewRateLimiterMemoryStoreWithConfig(echomw.RateLimiterMemoryStoreConfig{Rate: 1.0 / 10, Burst: 5, ExpiresIn: 10 * time.Minute})
-	api.POST("/auth/otp/request", d.Auth.RequestOTP, echomw.RateLimiter(otpRequestLimiter))
-	api.POST("/auth/otp/verify", d.Auth.VerifyOTP, echomw.RateLimiter(otpVerifyLimiter))
+	api.POST("/auth/otp/request", d.Auth.RequestOTP, middleware.SharedRateLimit(d.RateLimits, 2, 30*time.Second))
+	api.POST("/auth/otp/verify", d.Auth.VerifyOTP, middleware.SharedRateLimit(d.RateLimits, 5, 10*time.Second))
 	api.GET("/products", d.Products.List)
 	api.GET("/products/slug/:slug", d.Products.GetBySlug)
 	api.GET("/products/:id/comments", d.Comments.ListApproved)
@@ -86,9 +94,8 @@ func New(d Deps) *echo.Echo {
 	api.GET("/banners", d.Commerce.ListBanners)
 	api.GET("/shipping-methods", d.Commerce.ListShipping)
 	api.GET("/tracking/:code", d.Commerce.Track)
-	analyticsLimiter := echomw.NewRateLimiterMemoryStoreWithConfig(echomw.RateLimiterMemoryStoreConfig{Rate: 1.0 / 2, Burst: 6, ExpiresIn: 10 * time.Minute})
-	api.POST("/analytics/heartbeat", d.Analytics.Heartbeat, echomw.RateLimiter(analyticsLimiter))
-	api.POST("/analytics/view", d.Analytics.RecordView, echomw.RateLimiter(analyticsLimiter))
+	api.POST("/analytics/heartbeat", d.Analytics.Heartbeat, middleware.SharedRateLimit(d.RateLimits, 6, 2*time.Second))
+	api.POST("/analytics/view", d.Analytics.RecordView, middleware.SharedRateLimit(d.RateLimits, 6, 2*time.Second))
 	// The payment gateway routes are public on purpose: the random authority
 	// token in the URL is the capability, just like a real gateway's
 	// checkout link needs no separate merchant login.
@@ -147,6 +154,7 @@ func New(d Deps) *echo.Echo {
 	api.GET("/admin/users", d.Admin.ListUsers, authRequired, adminOnly)
 	api.PATCH("/admin/users/:id/access", d.Admin.ChangeUserAccess, authRequired, adminOnly)
 	api.GET("/admin/orders", d.Admin.ListOrders, authRequired, adminOnly)
+	api.GET("/admin/orders/:id", d.Admin.GetOrder, authRequired, adminOnly)
 	api.GET("/admin/comments", d.Comments.ListAll, authRequired, adminOnly)
 	api.PATCH("/admin/comments/:id/approval", d.Comments.SetApproval, authRequired, adminOnly)
 	api.PATCH("/admin/orders/:id/status", d.Admin.ChangeOrderStatus, authRequired, adminOnly)

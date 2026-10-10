@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"shop-api/internal/domain"
 )
@@ -35,6 +36,9 @@ func (s *PaymentService) RequestPayment(ctx context.Context, userID, orderID int
 			return domain.ErrNotFound
 		}
 		if order.Status != domain.OrderStatusAwaitingPayment {
+			return domain.ErrOrderNotPayable
+		}
+		if !time.Now().Before(order.PaymentExpiresAt) {
 			return domain.ErrOrderNotPayable
 		}
 		if existing, err := repos.Payments.GetByOrderID(ctx, orderID); err == nil {
@@ -86,6 +90,9 @@ func (s *PaymentService) ConfirmPayment(ctx context.Context, authority, action s
 		}
 		if order.Status != domain.OrderStatusAwaitingPayment {
 			return domain.ErrPaymentAlreadyProcessed
+		}
+		if !time.Now().Before(order.PaymentExpiresAt) {
+			return domain.ErrOrderNotPayable
 		}
 		if action == "pay" {
 			refID, err := randomDigits(12)

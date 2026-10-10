@@ -142,28 +142,33 @@ func (r *ProductRepository) get(ctx context.Context, where string, arg any) (*do
 }
 
 func (r *ProductRepository) List(ctx context.Context, search string, categoryID, brandID *int64, limit, offset int) ([]domain.Product, int, error) {
-	return r.list(ctx, search, categoryID, brandID, false, limit, offset)
+	return r.list(ctx, search, categoryID, brandID, false, false, limit, offset)
+}
+
+func (r *ProductRepository) ListPopular(ctx context.Context, limit, offset int) ([]domain.Product, int, error) {
+	return r.list(ctx, "", nil, nil, false, true, limit, offset)
 }
 
 func (r *ProductRepository) ListAdmin(ctx context.Context, search string, categoryID, brandID *int64, limit, offset int) ([]domain.Product, int, error) {
-	return r.list(ctx, search, categoryID, brandID, true, limit, offset)
+	return r.list(ctx, search, categoryID, brandID, true, false, limit, offset)
 }
 
-func (r *ProductRepository) list(ctx context.Context, search string, categoryID, brandID *int64, includeInactive bool, limit, offset int) ([]domain.Product, int, error) {
+func (r *ProductRepository) list(ctx context.Context, search string, categoryID, brandID *int64, includeInactive, popularOnly bool, limit, offset int) ([]domain.Product, int, error) {
 	pattern := "%" + search + "%"
 	const where = `($1::bigint IS NULL OR p.category_id IN (SELECT id FROM category_tree))
 		AND ($2::bigint IS NULL OR p.brand_id = $2)
 		AND ($3 = '' OR p.name ILIKE $4 OR p.slug ILIKE $4 OR p.description ILIKE $4 OR b.name ILIKE $4)
-		AND ($5::boolean OR p.is_active)`
+		AND ($5::boolean OR p.is_active)
+		AND (NOT $6::boolean OR p.is_popular)`
 	const categoryTree = `WITH RECURSIVE category_tree(id) AS (
 		SELECT id FROM categories WHERE $1::bigint IS NOT NULL AND id = $1
 		UNION ALL SELECT c.id FROM categories c JOIN category_tree tree ON c.parent_id = tree.id
 	) `
 	var total int
-	if err := r.db.QueryRow(ctx, categoryTree+`SELECT COUNT(*) FROM products p JOIN brands b ON b.id=p.brand_id WHERE `+where, categoryID, brandID, search, pattern, includeInactive).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, categoryTree+`SELECT COUNT(*) FROM products p JOIN brands b ON b.id=p.brand_id WHERE `+where, categoryID, brandID, search, pattern, includeInactive, popularOnly).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count products: %w", err)
 	}
-	rows, err := r.db.Query(ctx, categoryTree+`SELECT `+productColumns+productFrom+`WHERE `+where+` ORDER BY p.id DESC LIMIT $6 OFFSET $7`, categoryID, brandID, search, pattern, includeInactive, limit, offset)
+	rows, err := r.db.Query(ctx, categoryTree+`SELECT `+productColumns+productFrom+`WHERE `+where+` ORDER BY p.id DESC LIMIT $7 OFFSET $8`, categoryID, brandID, search, pattern, includeInactive, popularOnly, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list products: %w", err)
 	}

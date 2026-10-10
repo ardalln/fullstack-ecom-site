@@ -76,6 +76,18 @@ func (h *AdminHandler) ListOrders(c echo.Context) error {
 	return c.JSON(http.StatusOK, toOrderPage(orders, page, limit, total))
 }
 
+func (h *AdminHandler) GetOrder(c echo.Context) error {
+	id, err := idParam(c)
+	if err != nil {
+		return err
+	}
+	order, err := h.svc.GetOrder(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, toOrderResponse(order))
+}
+
 func (h *AdminHandler) ChangeOrderStatus(c echo.Context) error {
 	id, err := idParam(c)
 	if err != nil {

@@ -69,6 +69,7 @@ type Order struct {
 	ShippingPostalCode    string
 	Items                 []OrderItem
 	Payment               *OrderPaymentInfo
+	PaymentExpiresAt      time.Time
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 }

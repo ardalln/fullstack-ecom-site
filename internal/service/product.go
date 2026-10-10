@@ -223,6 +223,10 @@ func (s *ProductService) List(ctx context.Context, search string, categoryID, br
 	return s.products.List(ctx, search, categoryID, brandID, limit, (page-1)*limit)
 }
 
+func (s *ProductService) ListPopular(ctx context.Context, page, limit int) ([]domain.Product, int, error) {
+	return s.products.ListPopular(ctx, limit, (page-1)*limit)
+}
+
 func (s *ProductService) ListAdmin(ctx context.Context, search string, categoryID, brandID *int64, page, limit int) ([]domain.Product, int, error) {
 	if categoryID != nil {
 		if _, err := s.categories.GetByID(ctx, *categoryID); err != nil {

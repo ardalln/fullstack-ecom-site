@@ -4,10 +4,11 @@ import "errors"
 
 // Sentinel errors. The HTTP layer maps them to status codes.
 var (
-	ErrInvalidInput = errors.New("invalid input")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrForbidden    = errors.New("you do not have permission to perform this action")
-	ErrNotFound     = errors.New("resource not found")
+	ErrInvalidInput      = errors.New("invalid input")
+	ErrUnauthorized      = errors.New("unauthorized")
+	ErrForbidden         = errors.New("you do not have permission to perform this action")
+	ErrNotFound          = errors.New("resource not found")
+	ErrRateLimitExceeded = errors.New("rate limit exceeded")
 
 	ErrPhoneTaken        = errors.New("phone number is already registered")
 	ErrEmailTaken        = errors.New("email is already registered")

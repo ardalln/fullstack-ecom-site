@@ -53,6 +53,10 @@ func (s *AdminService) ListOrders(ctx context.Context, status domain.OrderStatus
 	return s.orders.ListAll(ctx, status, limit, (page-1)*limit)
 }
 
+func (s *AdminService) GetOrder(ctx context.Context, orderID int64) (*domain.Order, error) {
+	return s.orders.GetByID(ctx, orderID)
+}
+
 func (s *AdminService) ChangeOrderStatus(ctx context.Context, orderID int64, next domain.OrderStatus) (*domain.Order, error) {
 	if !validAdminOrderStatus(next) {
 		return nil, fmt.Errorf("%w: unsupported order status", domain.ErrInvalidInput)
